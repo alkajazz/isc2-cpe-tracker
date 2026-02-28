@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ISC² CPE Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg class="header-seal" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="10,2 22,2 30,10 30,22 22,30 10,30 2,22 2,10"
+        stroke-width="1.2" style="fill:var(--accent-dim);stroke:var(--accent)"/>
+      <polygon points="11.5,5.5 20.5,5.5 26.5,11.5 26.5,20.5 20.5,26.5 11.5,26.5 5.5,20.5 5.5,11.5"
+        fill="none" stroke-width="0.6" style="stroke:var(--accent-line)"/>
+      <text x="16" y="15.5" text-anchor="middle"
+        font-family="DM Sans, system-ui, sans-serif" font-size="5.5" font-weight="700" letter-spacing="0.12em"
+        style="fill:var(--accent-bright)">ISC²</text>
+      <text x="16" y="22.5" text-anchor="middle"
+        font-family="DM Sans, system-ui, sans-serif" font-size="4.5" font-weight="600" letter-spacing="0.15em"
+        style="fill:var(--accent)">CPE</text>
+    </svg>
+    <div class="header-title">
+      <h1><span class="isc2-mark">ISC²</span> CPE Tracker</h1>
+      <span class="header-subtitle">Continuing Professional Education</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="theme-palette" aria-label="Accent colour">
+      <button class="theme-swatch active" data-theme="amber" style="background:#e8950f" title="Amber"></button>
+      <button class="theme-swatch"        data-theme="red"    style="background:#e04444" title="Red"></button>
+      <button class="theme-swatch"        data-theme="green"  style="background:#27ae63" title="Green"></button>
+      <button class="theme-swatch"        data-theme="blue"   style="background:#2389d4" title="Blue"></button>
+      <button class="theme-swatch"        data-theme="purple" style="background:#8b52e0" title="Purple"></button>
+      <button class="theme-swatch"        data-theme="cyan"   style="background:#12b0b0" title="Cyan"></button>
+    </div>
+    <button id="btn-add" class="btn-secondary btn-sm">＋ Add Entry</button>
+    <button id="btn-fetch" class="btn-primary btn-sm">↻ Fetch Now</button>
+    <button id="btn-export" class="btn-secondary btn-sm">↓ Export CSV</button>
+    <button id="btn-export-pdf" class="btn-secondary btn-sm" onclick="exportVisiblePDF()">↓ Export PDF</button>
+    <a href="/admin.html" class="btn-secondary">Storage</a>
+  </div>
+</header>
+
+<div class="app-layout">
+
+  <!-- Sidebar: stats + domain breakdown -->
+  <aside class="sidebar">
+
+    <div class="stat-primary">
+      <div class="stat-number" id="total-hours">—</div>
+      <div class="stat-label">Total CPE Hours</div>
+    </div>
+
+    <div class="stat-rule"></div>
+
+    <div class="stat-secondary-grid">
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="total-entries">—</div>
+        <div class="stat-label">Entries</div>
+      </div>
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="approved-count">—</div>
+        <div class="stat-label">Submitted</div>
+      </div>
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="pending-count">—</div>
+        <div class="stat-label">Pending</div>
+      </div>
+    </div>
+
+    <div class="stat-rule"></div>
+
+    <div class="domain-section-label">By Domain</div>
+    <div class="domain-list" id="domain-list">
+      <div style="color:var(--text-dim);font-size:11px">Loading…</div>
+    </div>
+
+  </aside>
+
+  <!-- Main area: filters + table -->
+  <div class="main-area">
+
+    <!-- Add CPE Form -->
+    <div class="add-form" id="add-form">
+      <h3>Add CPE Entry</h3>
+      <form id="add-cpe-form">
+        <div class="form-grid">
+          <div class="form-field" style="grid-column: span 2">
+            <label>Title *</label>
+            <input id="add-title" type="text" placeholder="Episode or article title" required>
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>URL</label>
+            <input id="add-url" type="text" placeholder="https://…">
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>Description</label>
+            <textarea id="add-description" placeholder="Brief summary…"></textarea>
+          </div>
+          <div class="form-field">
+            <label>Type</label>
+            <select id="add-type">
+              <option value="podcast">Podcast</option>
+              <option value="article">Article</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>CPE Hours</label>
+            <input id="add-hours" type="number" min="0.25" max="40" step="0.25" value="1.0">
+          </div>
+          <div class="form-field">
+            <label>Presenter</label>
+            <input id="add-presenter" type="text" placeholder="e.g. Steve Gibson">
+          </div>
+          <div class="form-field">
+            <label>Published Date</label>
+            <input id="add-pubdate" type="date">
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>CISSP Domains (select all that apply)</label>
+            <div id="add-domain-checks" class="domain-check-grid"></div>
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>Notes</label>
+            <input id="add-notes" type="text" placeholder="Optional notes…">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Add Entry</button>
+          <button type="button" class="btn-secondary"
+            onclick="document.getElementById('add-form').classList.remove('open')">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Domain</label>
+        <select id="filter-domain"><option value="">All Domains</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Status</label>
+        <select id="filter-status">
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="submitted">Submitted</option>
+          <option value="archived">Archived</option>
+          <option value="deleted">🗑 Trash</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Type</label>
+        <select id="filter-type">
+          <option value="">All</option>
+          <option value="podcast">Podcast</option>
+          <option value="article">Article</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>From</label>
+        <input type="date" id="filter-from">
+      </div>
+      <div class="filter-group">
+        <label>To</label>
+        <input type="date" id="filter-to">
+      </div>
+      <div class="filter-group" style="flex-direction:row;gap:6px;margin-top:auto">
+        <button id="btn-filter" class="btn-primary btn-sm">Apply</button>
+        <button id="btn-clear-filters" class="btn-secondary btn-sm">Clear</button>
+      </div>
+    </div>
+
+    <!-- Table toolbar -->
+    <div class="table-toolbar">
+      <span id="row-count"></span>
+      <button id="btn-columns" class="btn-secondary btn-sm">Columns &#9660;</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="col-headers"></tr>
+        </thead>
+        <tbody id="cpe-tbody">
+          <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Hidden file input for proof upload -->
+<input type="file" id="proof-file-input" accept="image/*" style="display:none">
+
+<!-- ISC2 CPE Modal -->
+<div id="isc2-modal" class="modal-overlay" onclick="if(event.target===this)closeISC2Modal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>ISC² Submission Fields</h3>
+      <button class="btn-secondary btn-sm" onclick="closeISC2Modal()">Close</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="isc2-field">
+        <label>Title</label>
+        <div class="isc2-value" id="isc2-title"></div>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" onclick="copyISC2Field('isc2-title')">Copy</button>
+        </div>
+      </div>
+
+      <div class="isc2-field">
+        <label>Presenter</label>
+        <div class="isc2-value" id="isc2-presenter"></div>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" onclick="copyISC2Field('isc2-presenter')">Copy</button>
+        </div>
+      </div>
+
+      <div class="isc2-field">
+        <label>Year Published</label>
+        <div class="isc2-value" id="isc2-year"></div>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" onclick="copyISC2Field('isc2-year')">Copy</button>
+        </div>
+      </div>
+
+      <div class="isc2-field">
+        <label>CPE Credits</label>
+        <div class="isc2-value" id="isc2-cpe-credits"></div>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" onclick="copyISC2Field('isc2-cpe-credits')">Copy</button>
+        </div>
+      </div>
+
+      <div class="isc2-field isc2-field--summary">
+        <label>Summary
+          <span style="color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;font-size:10px">
+            (edit to your own words)
+          </span>
+        </label>
+        <textarea class="isc2-value" id="isc2-summary"
+          placeholder="Write 2-3 sentences describing what you learned from this episode…"
+          onblur="saveISC2Summary()"></textarea>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" onclick="copyISC2Field('isc2-summary')">Copy</button>
+          <button class="btn-secondary btn-sm" id="btn-use-description" style="display:none"
+            onclick="useEpisodeDescription()">&#8635; Use feed description</button>
+        </div>
+      </div>
+
+      <div class="isc2-field" id="isc2-proof-section">
+        <label>Completion Proof
+          <span style="color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;font-size:10px">
+            (screenshot near end)
+          </span>
+        </label>
+        <div id="isc2-proof-preview" class="proof-preview-area"></div>
+        <div class="isc2-actions">
+          <button class="btn-secondary btn-sm" id="btn-isc2-upload-proof" onclick="triggerProofUpload()">Upload Screenshot</button>
+          <button class="btn-danger btn-sm" id="btn-isc2-delete-proof" style="display:none" onclick="deleteProof()">Remove</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="col-picker" class="col-picker"></div>
+<!-- Bulk action bar — appears when rows are selected -->
+<div id="bulk-bar" class="bulk-bar">
+  <span id="bulk-count" class="bulk-bar-count">0 selected</span>
+  <div class="bulk-bar-sep"></div>
+
+  <!-- Edit section: hidden in trash view -->
+  <div id="bulk-edit-section" style="display:flex;align-items:center;gap:8px">
+    <select id="bulk-field" onchange="updateBulkValueInput()">
+      <option value="">Set field&hellip;</option>
+      <option value="status">Status</option>
+      <option value="domains">Domain</option>
+      <option value="cpe_hours">Hours</option>
+    </select>
+    <div id="bulk-value-wrap"></div>
+    <button class="btn-primary btn-sm" onclick="bulkApply()">Apply</button>
+    <div class="bulk-bar-sep"></div>
+  </div>
+
+  <!-- Restore: only in trash view -->
+  <button id="bulk-restore-btn" class="btn-secondary btn-sm" style="display:none" onclick="bulkRestore()">Restore Selected</button>
+
+  <button id="bulk-delete-btn" class="btn-danger" onclick="bulkDelete()">Delete Selected</button>
+  <div class="bulk-bar-sep"></div>
+  <button class="btn-secondary btn-sm" onclick="exportPDF()">&#8595; Export PDF</button>
+  <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
+</div>
+
+<div id="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
