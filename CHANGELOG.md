@@ -1,5 +1,40 @@
 # Changelog
 
+## v3.2 — 2026-02-28
+
+### Added
+- **Date preset chips** — one-click quick filters on the dashboard: 7 days, This month, Last month, This year, Last year; fills the From/To date inputs and applies the filter instantly
+- **Filtered sidebar** — Total CPE Hours, entry counts, and domain progress bars now reflect the currently filtered view rather than global totals; computed client-side from the filtered row set
+- **Per-feed sync window** — each feed has its own configurable lookback window (1–365 days, default 60); editable per feed on the Config page; stored in `feeds.json` and passed through `fetch_feed()`
+- **Light / Dark mode** — toggle between a warm light theme and the default near-black dark theme; FOUC prevention inline script in `<head>` on all pages; preference persists in `localStorage` across all pages
+- **Config page** (`/config.html`) — dedicated feed manager page with per-feed Days input; moved from admin page
+- **Storage page** (`/storage.html`) — proof attachments listing and deletion; moved from admin page
+- **Animated GIFs in README** — `light-mode-toggle.gif` and `date-presets.gif` demonstrating key features
+
+### Changed
+- **Admin page** — now contains only backfill tools (Fix Presenter Names, Fix Subtitles, Fix Titles); feeds and storage sections moved to dedicated pages
+- **Navigation** — 4-page nav bar on all pages: Dashboard / Config / Admin / Storage; mode toggle button in nav with visual separator; no separate header-actions on Dashboard
+- **Table toolbar** — Add Entry, Fetch Now, Export CSV, Export PDF, and Columns buttons moved from header into a toolbar row directly above the data table
+- **Default status filter** — changed from "Pending" to "All" so all entries are visible on first load
+- **Test suite** — 100 tests (up from 93 in v3.1); 4 new `test_feeds.py` cutoff_days tests, 3 new `test_rss.py` per-feed cutoff tests
+
+## v3.1 — 2026-02-28
+
+### Added
+- **Multi-feed RSS configuration** — add any number of RSS/Atom podcast feeds from the admin page; Security Now is pre-configured by default; each feed stores a name, URL, enabled flag, and added date in `data/feeds.json` (atomic JSON, `feed_store.py`)
+- **Feed manager UI** — admin page Feed Manager card: add feeds by URL (name auto-detected from feed title), enable/disable toggle, delete with optional purge of all CPE entries from that source; shows live entry count per feed before purging
+- **Purge-on-feed-delete** — `DELETE /api/feeds/{id}?purge_data=true` permanently removes all CPE entries (and their proof images) whose `source` matches the feed name; entry count returned in response
+- **RSS 60-day cutoff** — `fetch_feed()` now filters out episodes published more than 60 days ago; prevents excessive backfill when adding a new feed with a large back-catalog; configurable per call
+- **Admin page overhaul** — nav tabs (Feed Manager / Backfill / Storage / Theme), theme switcher and accent color picker moved from the main dashboard to the admin page
+- **`feed_store.py`** — new module: thread-safe JSON feed config store with RLock + atomic writes, mirrors the patterns in `storage.py`
+- **New API routes** — `GET/POST/PUT/DELETE /api/feeds`; `DELETE /api/feeds/{id}` accepts `?purge_data=true`; `POST /api/fetch` now fetches all enabled feeds
+- **Test suite expanded** — `tests/test_feeds.py` (18 tests) and new `test_rss.py` cases for `fetch_all`, cutoff filtering, and multi-feed source naming; total 93 tests (up from 61 in v3.0)
+
+### Changed
+- `rss.py` `fetch_all()` now accepts a feed list parameter instead of using a hard-coded Security Now URL; each entry's `source` field is set to the configured feed name
+- Color picker and theme switcher removed from `index.html` header; now live on `admin.html`
+- Nav links styled as `btn-secondary` buttons; stale mobile-specific nav rule removed
+
 ## v3.0 — 2026-02-28
 
 ### Added

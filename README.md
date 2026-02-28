@@ -1,23 +1,41 @@
 # ISC² CPE Tracker
 
-A self-hosted, Dockerized web app for tracking ISC² Continuing Professional Education (CPE) hours from the **Security Now** podcast. Automatically pulls Security Now episodes from RSS and logs them as CPE entries. Review, edit, filter, and export records from a clean web UI — draft ISC² submission summaries, attach proof screenshots, and generate formatted PDF reports without leaving the app.
+A self-hosted, Dockerized web app for tracking ISC² Continuing Professional Education (CPE) hours from security podcasts and other sources. Automatically pulls episodes from configurable RSS feeds and logs them as CPE entries. Review, edit, filter, and export records from a clean web UI — draft ISC² submission summaries, attach proof screenshots, and generate formatted PDF reports without leaving the app.
 
-> **Note:** Automatic RSS ingestion supports **Security Now only** (`feeds.twit.tv/sn.xml`). Manual entries can be added for any CPE source (courses, articles, conferences, etc.).
+> **Default feed:** Security Now (`feeds.twit.tv/sn.xml`) is pre-configured. Add any other RSS/Atom podcast feed from the admin page. Manual entries can be added for any CPE source (courses, articles, conferences, etc.).
 
-![Version](https://img.shields.io/badge/version-3.0-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-61%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-3.2-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-100%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
-## Screenshot
+## Screenshots
 
-![ISC² CPE Tracker dashboard](screenshot.png)
+### Dashboard — dark mode (default)
+![Dashboard](screenshots/dashboard.png)
+
+### Light / Dark mode toggle
+![Light mode toggle](screenshots/light-mode-toggle.gif)
+
+### Date preset chips
+![Date presets](screenshots/date-presets.gif)
+
+### Config — feed manager with per-feed sync window
+![Config page](screenshots/config.png)
+
+### Storage — proof attachments
+![Storage page](screenshots/storage.png)
+
+### Admin — backfill tools
+![Admin page](screenshots/admin.png)
 
 ---
 
 ## Features
 
 ### Data Ingestion
-- **Auto-fetch** — pulls Security Now episodes from RSS every 6 hours; deduplicates by URL
+- **Multi-feed RSS** — configure any number of RSS/Atom podcast feeds from the Config page; each feed can be enabled or disabled independently; Security Now is pre-configured by default
+- **Per-feed sync window** — each feed has its own configurable lookback window (1–365 days, default 60); change it on the Config page per feed
+- **Auto-fetch** — pulls all enabled feeds every 6 hours; deduplicates by URL
 - **Manual entry** — add CPE records for courses, articles, or any other source
 - **Duration-based CPE hours** — parses `itunes:duration` from RSS; rounds to nearest 0.25 h (ISC² rule); minimum 0.25, maximum 40 per activity
 - **Multi-domain auto-tagging** — scores each episode against all 8 CISSP domains; tags up to 3 matching domains automatically
@@ -31,7 +49,9 @@ A self-hosted, Dockerized web app for tracking ISC² Continuing Professional Edu
 ### Table & Filtering
 - **Inline editing** — edit CPE hours, domain, status, and notes directly in the table
 - **Duration column** — episode runtime displayed as "1h 32m" from raw RSS duration data
-- **Filtering** — filter by domain, status (Pending / Submitted / Archived / Trash), type, and date range; defaults to Pending on load
+- **Date preset chips** — one-click quick filters: 7 days, This month, Last month, This year, Last year
+- **Filtering** — filter by domain, status (All / Pending / Submitted / Archived / Trash), type, and date range; sidebar counters reflect the current filtered view
+- **Filtered sidebar** — Total CPE Hours, entry counts, and domain bars all update instantly to reflect the active filter
 - **Column management** — reorder (drag), resize (drag edge), show/hide columns; all preferences persist in `localStorage`
 - **Column sort** — click any header to sort ascending / descending
 - **Multi-select + bulk actions** — checkbox column with select-all; floating bulk bar to set Status / Domain / Hours across many rows, or delete/restore/purge in bulk
@@ -41,16 +61,21 @@ A self-hosted, Dockerized web app for tracking ISC² Continuing Professional Edu
 - **Trash view** — select "Trash" in the Status filter to see deleted entries; restore to Pending or purge permanently
 - **Purge** — permanently removes the row and its proof image
 
-### UI & Mobile
-- **Amber/serif aesthetic** — near-black background, Cormorant Garamond display numerals, DM Sans UI text, JetBrains Mono for data
-- **Accent color picker** — 6 themes (amber, red, green, blue, purple, cyan); persists in `localStorage`
-- **Fixed sidebar** — total CPE hours (large serif), entry counts, domain progress bars
-- **Mobile-responsive** — on narrow screens only Title and Proof columns are shown; PDF export button is always visible in the header (no row selection required on mobile)
+### UI & Theme
+- **Light / Dark mode** — toggle between a warm light theme and the default near-black dark theme; preference persists across page reloads and all pages
+- **Accent color picker** — 6 themes (amber, red, green, blue, purple, cyan); available on Config, Admin, and Storage pages
+- **Amber/serif aesthetic** — Cormorant Garamond display numerals, DM Sans UI text, JetBrains Mono for data
+- **Filtered sidebar** — total CPE hours (large serif), entry counts, domain progress bars; reflects current filter state
+- **Mobile-responsive** — on narrow screens only Title and Proof columns are shown; PDF export is always accessible
 - **No build step** — plain HTML/CSS/JS frontend; no Node.js or bundler
 
-### Admin
-- **Storage admin page** — `/admin.html`; lists attachments with sizes and linked entry titles
-- **Backfill tools** — re-sync presenter names, subtitles, and title normalisation from RSS for existing entries
+### Pages
+| Page | Path | Purpose |
+|------|------|---------|
+| Dashboard | `/` | Main CPE table — filter, edit, export, fetch |
+| Config | `/config.html` | Feed manager + per-feed sync window |
+| Admin | `/admin.html` | Backfill tools (fix presenter names, subtitles, titles) |
+| Storage | `/storage.html` | Proof attachment listing and deletion |
 
 ---
 
@@ -118,9 +143,13 @@ Data lives in `cissp-cpe-tracker/data/cpes.csv` and `data/attachments/`, mounted
 | POST | `/api/cpes/{id}/proof` | Upload a proof screenshot |
 | GET | `/api/cpes/{id}/proof` | Serve a proof screenshot |
 | DELETE | `/api/cpes/{id}/proof` | Delete a proof screenshot |
-| POST | `/api/fetch` | Trigger an immediate RSS fetch |
+| POST | `/api/fetch` | Trigger an immediate RSS fetch (all enabled feeds) |
 | GET | `/api/export` | Download the CSV |
 | GET | `/api/summary` | CPE totals by domain, status, and type |
+| GET | `/api/feeds` | List configured RSS feeds |
+| POST | `/api/feeds` | Add a feed (validates URL, auto-detects name) |
+| PUT | `/api/feeds/{id}` | Update feed name or enabled flag |
+| DELETE | `/api/feeds/{id}` | Remove feed; `?purge_data=true` also deletes its CPE entries |
 | GET | `/api/admin/storage` | List attachments with sizes and linked titles |
 | POST | `/api/admin/backfill-presenters` | Re-sync presenter fields from RSS |
 | POST | `/api/admin/backfill-subtitles` | Populate subtitle field on existing entries |
@@ -137,20 +166,23 @@ cissp-cpe-tracker/
 ├── main.py              # FastAPI app and all API routes
 ├── rss.py               # RSS fetching, duration parsing, domain classification
 ├── storage.py           # Thread-safe CSV read/write (RLock + atomic writes)
+├── feed_store.py        # Thread-safe JSON feed config store (feeds.json)
 ├── scheduler.py         # Background fetch job (every 6 hours)
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
 ├── data/                # Docker volume mount (gitignored)
 │   ├── cpes.csv         # All CPE records (CSV schema v1.6)
+│   ├── feeds.json       # Configured RSS feed list (auto-created)
 │   └── attachments/     # Proof screenshot files
 ├── static/
 │   ├── index.html       # Main dashboard
-│   ├── admin.html       # Storage admin page
+│   ├── admin.html       # Admin page (feeds, storage, backfill, theme)
 │   ├── app.js           # SPA logic
 │   └── style.css
 └── tests/
-    ├── test_rss.py      # RSS parsing and domain classification (36 tests)
+    ├── test_feeds.py    # Feed store CRUD (18 tests)
+    ├── test_rss.py      # RSS parsing and domain classification (50 tests)
     └── test_storage.py  # CSV storage, soft delete, purge, submitted_date (25 tests)
 ```
 

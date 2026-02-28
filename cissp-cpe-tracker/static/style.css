@@ -32,6 +32,24 @@
   --radius-md: 4px;
 }
 
+/* Light mode overrides — toggled via html[data-mode="light"] */
+html[data-mode="light"] {
+  --bg:       #f5f4f0;
+  --surface:  #eeede9;
+  --surface2: #e8e7e2;
+  --surface3: #dfddd7;
+  --border:   #ccc9bf;
+  --border-mid: #b5b2a7;
+  --text:     #1c1a17;
+  --text-muted: #6b6760;
+  --text-dim: #a09d97;
+  --success-text: #1d8a56;
+  --success-dim: rgba(29,138,86,0.12);
+  --danger: #b83232;
+  --danger-text: #c84040;
+  --danger-dim: rgba(184,50,50,0.10);
+}
+
 html { -webkit-font-smoothing: antialiased; }
 
 body {
@@ -110,6 +128,50 @@ header::before {
   gap: 7px;
   align-items: center;
   flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.header-vsep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-mid);
+  flex-shrink: 0;
+}
+
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.header-nav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.header-nav-link:hover {
+  background: var(--surface3);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.header-nav-link.active {
+  color: var(--accent-bright);
+  border-color: var(--accent);
+  background: var(--accent-dim);
 }
 
 /* ============================================================
@@ -1007,7 +1069,6 @@ main {
 
   /* Hide non-essential header elements on mobile */
   .theme-palette { display: none; }
-  header a.btn-secondary { display: none; } /* Storage link */
 
   /* Stack header actions */
   .header-actions { gap: 6px; flex-wrap: wrap; }
@@ -1023,4 +1084,62 @@ main {
 
   /* Title column can use more space on mobile */
   td.title-cell { max-width: none; }
+}
+
+/* ============================================================
+   DATE PRESET CHIPS
+   ============================================================ */
+.date-presets {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.preset-chip {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  background: var(--surface2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.preset-chip:hover {
+  background: var(--accent-dim);
+  color: var(--accent-bright);
+  border-color: var(--accent-line);
+}
+
+/* ============================================================
+   MODE TOGGLE BUTTON
+   ============================================================ */
+#btn-mode-toggle {
+  font-size: 14px;
+  padding: 4px 8px;
+  min-width: 32px;
+}
+
+/* ============================================================
+   DAYS INPUT (config.html feed table)
+   ============================================================ */
+.days-input {
+  width: 56px;
+  padding: 3px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.days-label {
+  font-size: 11px;
+  color: var(--text-muted);
 }

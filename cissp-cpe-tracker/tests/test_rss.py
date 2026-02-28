@@ -1,7 +1,8 @@
-"""Tests for rss.py — domain classification and duration parsing."""
+"""Tests for rss.py — domain classification, duration parsing, and multi-feed fetching."""
 import pytest
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
-from rss import classify_domain, classify_domains, parse_duration, _DOMAIN_KEYWORDS
+from rss import classify_domain, classify_domains, parse_duration, _DOMAIN_KEYWORDS, _within_cutoff
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +201,11 @@ class TestFetchSecurityNowFields:
             "title": title, "link": link, "summary": summary,
         }.get(key, default)
         entry.itunes_duration = duration
-        entry.published = "Mon, 01 Jan 2024 00:00:00 +0000"
+        # Use a recent date so the 60-day cutoff filter doesn't drop this entry
+        recent = (datetime.now(timezone.utc) - timedelta(days=7)).strftime(
+            "%a, %d %b %Y %H:%M:%S +0000"
+        )
+        entry.published = recent
         return entry
 
     def test_entry_has_domains_field(self):
@@ -233,3 +238,210 @@ class TestFetchSecurityNowFields:
             entries = fetch_security_now()
         assert "isc2_summary" in entries[0]
         assert entries[0]["isc2_summary"] == ""
+
+
+# ---------------------------------------------------------------------------
+# fetch_feed and fetch_all (multi-feed)
+# ---------------------------------------------------------------------------
+
+def _make_parsed_feed(title="Test Podcast", entries=None):
+    """Build a minimal feedparser result object for mocking."""
+    parsed = MagicMock()
+    parsed.feed.get = lambda key, default="": {"title": title}.get(key, default)
+    parsed.entries = entries or []
+    return parsed
+
+
+def _make_feed_entry(title="Episode 1", link="https://example.com/ep1",
+                     summary="Security episode about network and VPN.",
+                     duration="01:00:00", author="Jane Doe", days_ago=7):
+    entry = MagicMock()
+    entry.get = lambda key, default="": {
+        "title": title, "link": link, "summary": summary, "author": author,
+    }.get(key, default)
+    entry.itunes_duration = duration
+    recent = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime(
+        "%a, %d %b %Y %H:%M:%S +0000"
+    )
+    entry.published = recent
+    return entry
+
+
+class TestFetchFeed:
+    """Tests for the generic fetch_feed() function."""
+
+    def test_source_field_set_from_name_param(self):
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(
+                title="My Podcast",
+                entries=[_make_feed_entry()],
+            )
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "My Custom Name")
+        assert entries[0]["source"] == "My Custom Name"
+
+    def test_returns_expected_fields(self):
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[_make_feed_entry()])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Test")
+        entry = entries[0]
+        for field in ("title", "url", "description", "source", "type",
+                      "cpe_hours", "domain", "domains", "presenter",
+                      "isc2_summary", "duration", "published_date"):
+            assert field in entry, f"Missing field: {field}"
+
+    def test_empty_feed_returns_empty_list(self):
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Empty")
+        assert entries == []
+
+
+class TestWithinCutoff:
+    """Unit tests for _within_cutoff()."""
+
+    def test_recent_date_returns_true(self):
+        recent = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        assert _within_cutoff(recent) is True
+
+    def test_old_date_returns_false(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        assert _within_cutoff(old) is False
+
+    def test_exactly_60_days_ago_is_false(self):
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=60, seconds=1)).isoformat()
+        assert _within_cutoff(cutoff) is False
+
+    def test_within_60_days_returns_true(self):
+        borderline = (datetime.now(timezone.utc) - timedelta(days=59)).isoformat()
+        assert _within_cutoff(borderline) is True
+
+    def test_unparseable_date_returns_true(self):
+        # Fail-safe: unknown dates are not silently dropped
+        assert _within_cutoff("not-a-date") is True
+
+    def test_custom_days_window(self):
+        date_30_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        assert _within_cutoff(date_30_days_ago, days=60) is True
+        assert _within_cutoff(date_30_days_ago, days=20) is False
+
+
+class TestFetchFeedCutoff:
+    """Verify that fetch_feed() drops entries older than FETCH_CUTOFF_DAYS."""
+
+    def test_old_entries_are_filtered(self):
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[
+                _make_feed_entry(days_ago=90),   # too old
+                _make_feed_entry(link="https://example.com/ep2", days_ago=10),  # recent
+            ])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Test")
+        assert len(entries) == 1
+        assert entries[0]["url"] == "https://example.com/ep2"
+
+    def test_all_recent_entries_pass_through(self):
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[
+                _make_feed_entry(days_ago=5),
+                _make_feed_entry(link="https://example.com/ep2", days_ago=30),
+            ])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Test")
+        assert len(entries) == 2
+
+
+class TestFetchAll:
+    """Tests for the multi-feed fetch_all() function."""
+
+    def test_skips_disabled_feeds(self):
+        feeds = [
+            {"url": "https://enabled.com/feed.xml", "name": "Enabled", "enabled": True},
+            {"url": "https://disabled.com/feed.xml", "name": "Disabled", "enabled": False},
+        ]
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[_make_feed_entry()])
+            from rss import fetch_all
+            entries = fetch_all(feeds)
+        # feedparser.parse should only have been called once (for the enabled feed)
+        assert mock_parse.call_count == 1
+
+    def test_continues_past_failed_feed(self):
+        feeds = [
+            {"url": "https://bad.com/feed.xml", "name": "Bad", "enabled": True},
+            {"url": "https://good.com/feed.xml", "name": "Good", "enabled": True},
+        ]
+        call_count = 0
+
+        def side_effect(url):
+            nonlocal call_count
+            call_count += 1
+            if "bad" in url:
+                raise RuntimeError("Connection refused")
+            return _make_parsed_feed(entries=[_make_feed_entry()])
+
+        with patch("rss.feedparser.parse", side_effect=side_effect):
+            from rss import fetch_all
+            entries = fetch_all(feeds)
+
+        assert call_count == 2
+        assert len(entries) == 1  # only the good feed's entry
+
+    def test_empty_feed_list_returns_empty(self):
+        from rss import fetch_all
+        assert fetch_all([]) == []
+
+    def test_fetch_all_passes_per_feed_cutoff(self):
+        """fetch_all() passes each feed's cutoff_days to fetch_feed()."""
+        feeds = [
+            {"url": "https://a.com/feed.xml", "name": "Feed A", "enabled": True, "cutoff_days": 10},
+            {"url": "https://b.com/feed.xml", "name": "Feed B", "enabled": True, "cutoff_days": 90},
+        ]
+        # Entry published 30 days ago — inside Feed B's window, outside Feed A's
+        old_entry = _make_feed_entry(
+            link="https://a.com/ep-old",
+            days_ago=30,
+        )
+        call_args = []
+
+        def side_effect(url):
+            call_args.append(url)
+            return _make_parsed_feed(entries=[old_entry])
+
+        with patch("rss.feedparser.parse", side_effect=side_effect):
+            from rss import fetch_all
+            entries = fetch_all(feeds)
+
+        # Feed A (cutoff=10): 30-day-old entry dropped → 0 entries
+        # Feed B (cutoff=90): 30-day-old entry kept → 1 entry
+        assert len(entries) == 1
+
+
+class TestFetchFeedCustomCutoff:
+    """Verify that fetch_feed() honours the cutoff_days parameter."""
+
+    def test_fetch_feed_respects_custom_cutoff(self):
+        """Entry older than cutoff_days is excluded; recent entry is kept."""
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[
+                _make_feed_entry(link="https://example.com/old", days_ago=45),   # outside 30-day cutoff
+                _make_feed_entry(link="https://example.com/new", days_ago=10),   # inside 30-day cutoff
+            ])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Test", cutoff_days=30)
+        assert len(entries) == 1
+        assert entries[0]["url"] == "https://example.com/new"
+
+    def test_fetch_feed_default_cutoff_is_60(self):
+        """When cutoff_days is not supplied, the 60-day default applies."""
+        with patch("rss.feedparser.parse") as mock_parse:
+            mock_parse.return_value = _make_parsed_feed(entries=[
+                _make_feed_entry(link="https://example.com/ep-50", days_ago=50),  # within 60 days
+                _make_feed_entry(link="https://example.com/ep-70", days_ago=70),  # outside 60 days
+            ])
+            from rss import fetch_feed
+            entries = fetch_feed("https://example.com/feed.xml", "Test")
+        assert len(entries) == 1
+        assert entries[0]["url"] == "https://example.com/ep-50"

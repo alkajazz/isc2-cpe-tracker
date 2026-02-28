@@ -299,6 +299,33 @@ def purge_entry(entry_id: str) -> bool:
     return True
 
 
+def purge_entries_by_source(source_name: str) -> int:
+    """
+    Permanently remove all entries whose ``source`` field matches ``source_name``.
+
+    Also deletes any attached proof image files (missing files are silently
+    ignored).  Unlike ``delete_entry()``, rows are removed entirely from the
+    CSV so their URLs leave the deduplication set.
+
+    Returns the count of rows removed.
+    """
+    with _lock:
+        rows = read_all()
+        keep = [r for r in rows if r.get("source") != source_name]
+        removed = [r for r in rows if r.get("source") == source_name]
+        if not removed:
+            return 0
+        for row in removed:
+            if row.get("proof_image"):
+                proof_path = os.path.join(get_attachments_dir(), row["proof_image"])
+                try:
+                    os.remove(proof_path)
+                except FileNotFoundError:
+                    pass
+        write_all(keep)
+        return len(removed)
+
+
 def get_csv_path() -> str:
     """Return the absolute path to the CSV file, creating it first if necessary."""
     _ensure_file()

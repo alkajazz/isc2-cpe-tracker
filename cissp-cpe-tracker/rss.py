@@ -3,10 +3,11 @@ RSS feed fetcher and CISSP domain classifier for ISC2 CPE Tracker.
 
 Responsibilities
 ----------------
+- Fetch RSS feeds (any podcast) and return entries ready for CSV storage
 - Fetch the Security Now podcast RSS feed (``feeds.twit.tv/sn.xml``)
 - Parse episode metadata: title, description, URL, publish date, duration
 - Classify episodes against the 8 CISSP domains using keyword scoring
-- Normalise episode titles: ``SN 999:`` → ``Security Now 999:``
+- Normalise Security Now episode titles: ``SN 999:`` → ``Security Now 999:``
 - Extract presenter names from RSS ``media:credit`` tags
 
 Domain classification
@@ -25,11 +26,17 @@ the nearest 0.25-hour increment.  A minimum of 0.25 h is enforced; the
 fallback for missing/unparseable durations is 1.0 h.
 """
 
+import logging
 import re
 import feedparser
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Episodes older than this many days are skipped at fetch time.
+FETCH_CUTOFF_DAYS = 60
 
 SECURITY_NOW_RSS = "https://feeds.twit.tv/sn.xml"
 
@@ -210,6 +217,21 @@ def _clean_text(text: Optional[str], max_len: int = 500) -> str:
     return text
 
 
+def _within_cutoff(date_str: str, days: int = FETCH_CUTOFF_DAYS) -> bool:
+    """
+    Return True if ``date_str`` (ISO-8601 UTC) is within the past ``days`` days.
+    Returns True on parse failure so ambiguous entries are never silently dropped.
+    """
+    try:
+        dt = datetime.fromisoformat(date_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        return dt >= cutoff
+    except Exception:
+        return True
+
+
 def fetch_security_now() -> list[dict]:
     """
     Fetch the Security Now RSS feed and return a list of episode dicts ready
@@ -250,6 +272,8 @@ def fetch_security_now() -> list[dict]:
         url = item.get("link", "")
         description = _clean_text(item.get("summary", ""))
         published_date = _parse_date(item)
+        if not _within_cutoff(published_date):
+            continue
         domains_list = classify_domains(title, description)
         cpe_hours = parse_duration(item)
         duration_raw = _get_raw_duration(item)
@@ -278,17 +302,78 @@ def fetch_security_now() -> list[dict]:
     return entries
 
 
-def fetch_all() -> list[dict]:
+def fetch_feed(url: str, name: str, cutoff_days: int = FETCH_CUTOFF_DAYS) -> list[dict]:
     """
-    Aggregate entries from all configured RSS sources into a single flat list.
+    Fetch any RSS podcast feed and return a list of entry dicts.
 
-    Currently the only source is Security Now.  Each source is wrapped in a
-    try/except so a failure in one feed does not prevent others from being
-    fetched.  Errors are printed to stdout for visibility in Docker logs.
+    Works with any feed that exposes standard RSS/Atom fields.  Unlike
+    ``fetch_security_now()``, no Security Now-specific normalisation is
+    applied (no title prefix rewrite, no subtitle stripping).
+
+    Each returned dict contains the same fields as ``fetch_security_now()``:
+    ``title``, ``subtitle``, ``description``, ``url``, ``published_date``,
+    ``source`` (set to *name*), ``type``, ``cpe_hours``, ``duration``,
+    ``domain``, ``domains``, ``presenter``, ``isc2_summary``.
+
+    :param cutoff_days: Only include entries published within this many days.
+    """
+    parsed = feedparser.parse(url)
+    feed_author = parsed.feed.get("author", "") if hasattr(parsed, "feed") else ""
+    entries = []
+
+    for item in parsed.entries:
+        title = item.get("title", "Untitled")
+        subtitle = _clean_text(
+            item.get("itunes_subtitle", "") or item.get("subtitle", ""),
+            max_len=200,
+        )
+        item_url = item.get("link", "")
+        description = _clean_text(item.get("summary", ""))
+        published_date = _parse_date(item)
+        if not _within_cutoff(published_date, days=cutoff_days):
+            continue
+        domains_list = classify_domains(title, description)
+        cpe_hours = parse_duration(item)
+        duration_raw = _get_raw_duration(item)
+
+        presenter = item.get("author", "") or feed_author
+
+        entries.append({
+            "title": title,
+            "subtitle": subtitle,
+            "description": description,
+            "url": item_url,
+            "published_date": published_date,
+            "source": name,
+            "type": "podcast",
+            "cpe_hours": str(cpe_hours),
+            "domain": domains_list[0],
+            "domains": "|".join(domains_list),
+            "presenter": presenter,
+            "isc2_summary": "",
+            "duration": duration_raw,
+        })
+
+    return entries
+
+
+def fetch_all(feeds: list[dict]) -> list[dict]:
+    """
+    Fetch all enabled feeds and return a single flat list of entry dicts.
+
+    Each feed dict must have at minimum ``url``, ``name``, and ``enabled``
+    keys (as stored by ``feed_store``).  Disabled feeds are skipped.  A
+    failed feed is logged and skipped so other feeds are unaffected.
     """
     results = []
-    try:
-        results.extend(fetch_security_now())
-    except Exception as e:
-        print(f"[RSS] Error fetching Security Now: {e}")
+    for feed in feeds:
+        if not feed.get("enabled", True):
+            continue
+        try:
+            results.extend(fetch_feed(
+                feed["url"], feed["name"],
+                feed.get("cutoff_days", FETCH_CUTOFF_DAYS),
+            ))
+        except Exception as e:
+            logger.error("feed fetch failed %s: %s", feed.get("url"), e)
     return results

@@ -8,6 +8,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
+  <script>
+    /* FOUC prevention — apply saved mode before CSS paints */
+    (function(){
+      var m = localStorage.getItem("cpe_mode") || "dark";
+      if (m === "light") document.documentElement.dataset.mode = "light";
+    })();
+  </script>
 </head>
 <body>
 
@@ -30,21 +37,15 @@
       <span class="header-subtitle">Continuing Professional Education</span>
     </div>
   </div>
-  <div class="header-actions">
-    <div class="theme-palette" aria-label="Accent colour">
-      <button class="theme-swatch active" data-theme="amber" style="background:#e8950f" title="Amber"></button>
-      <button class="theme-swatch"        data-theme="red"    style="background:#e04444" title="Red"></button>
-      <button class="theme-swatch"        data-theme="green"  style="background:#27ae63" title="Green"></button>
-      <button class="theme-swatch"        data-theme="blue"   style="background:#2389d4" title="Blue"></button>
-      <button class="theme-swatch"        data-theme="purple" style="background:#8b52e0" title="Purple"></button>
-      <button class="theme-swatch"        data-theme="cyan"   style="background:#12b0b0" title="Cyan"></button>
-    </div>
-    <button id="btn-add" class="btn-secondary btn-sm">＋ Add Entry</button>
-    <button id="btn-fetch" class="btn-primary btn-sm">↻ Fetch Now</button>
-    <button id="btn-export" class="btn-secondary btn-sm">↓ Export CSV</button>
-    <button id="btn-export-pdf" class="btn-secondary btn-sm" onclick="exportVisiblePDF()">↓ Export PDF</button>
-    <a href="/admin.html" class="btn-secondary">Storage</a>
-  </div>
+  <nav class="header-nav">
+    <a href="/" class="header-nav-link active">Dashboard</a>
+    <a href="/config.html" class="header-nav-link">Config</a>
+    <a href="/admin.html" class="header-nav-link">Admin</a>
+    <a href="/storage.html" class="header-nav-link">Storage</a>
+    <div class="header-vsep"></div>
+    <button id="btn-mode-toggle" class="btn-secondary btn-sm" onclick="toggleMode()">Light</button>
+  </nav>
+  <div class="header-actions"></div>
 </header>
 
 <div class="app-layout">
@@ -175,12 +176,28 @@
         <button id="btn-filter" class="btn-primary btn-sm">Apply</button>
         <button id="btn-clear-filters" class="btn-secondary btn-sm">Clear</button>
       </div>
+      <div class="date-presets" style="flex-basis:100%">
+        <span style="font-size:11px;color:var(--text-dim);margin-right:4px">Quick:</span>
+        <button class="preset-chip" onclick="setDatePreset('7d')">7 days</button>
+        <button class="preset-chip" onclick="setDatePreset('cur-month')">This month</button>
+        <button class="preset-chip" onclick="setDatePreset('prev-month')">Last month</button>
+        <button class="preset-chip" onclick="setDatePreset('cur-year')">This year</button>
+        <button class="preset-chip" onclick="setDatePreset('prev-year')">Last year</button>
+      </div>
     </div>
 
     <!-- Table toolbar -->
     <div class="table-toolbar">
       <span id="row-count"></span>
-      <button id="btn-columns" class="btn-secondary btn-sm">Columns &#9660;</button>
+      <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+        <button id="btn-add" class="btn-secondary btn-sm">＋ Add Entry</button>
+        <button id="btn-fetch" class="btn-primary btn-sm">↻ Fetch Now</button>
+        <div class="header-vsep"></div>
+        <button id="btn-export" class="btn-secondary btn-sm">↓ Export CSV</button>
+        <button id="btn-export-pdf" class="btn-secondary btn-sm" onclick="exportVisiblePDF()">↓ Export PDF</button>
+        <div class="header-vsep"></div>
+        <button id="btn-columns" class="btn-secondary btn-sm">Columns &#9660;</button>
+      </div>
     </div>
 
     <!-- Table -->

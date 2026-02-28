@@ -23,6 +23,12 @@ Utility:
     GET    /api/export                      download raw CSV
     GET    /api/summary                     aggregated stats
 
+Feed management:
+    GET    /api/feeds                       list configured RSS feeds
+    POST   /api/feeds                       add feed (validates URL, auto-detects name)
+    PUT    /api/feeds/{id}                  update feed name or enabled flag
+    DELETE /api/feeds/{id}                  remove feed (CPE entries unaffected)
+
 Admin:
     POST   /api/admin/backfill-presenters   re-sync presenter from RSS
     GET    /api/admin/storage               attachment file listing + sizes
@@ -38,6 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import storage
+import feed_store
 import scheduler as sched
 
 # MIME types accepted for proof screenshot uploads.
@@ -58,6 +65,19 @@ app = FastAPI(title="ISC2 CPE Tracker", lifespan=lifespan)
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
+class FeedCreate(BaseModel):
+    """Request body for POST /api/feeds."""
+    url: str
+    name: Optional[str] = None
+
+
+class FeedUpdate(BaseModel):
+    """Request body for PUT /api/feeds/{id} — all fields optional."""
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    cutoff_days: Optional[int] = None
+
 
 class CPECreate(BaseModel):
     """Request body for POST /api/cpes — all fields except id and fetched_date."""
@@ -281,6 +301,87 @@ def delete_proof(entry_id: str):
 
 
 # ---------------------------------------------------------------------------
+# Feed management routes
+# ---------------------------------------------------------------------------
+
+@app.get("/api/feeds")
+def list_feeds():
+    """Return all configured RSS feeds."""
+    return feed_store.read_feeds()
+
+
+@app.post("/api/feeds", status_code=201)
+def add_feed(body: FeedCreate):
+    """
+    Add a new RSS feed.
+
+    Validates that the URL is reachable and parses as a valid RSS/Atom feed.
+    Auto-detects the feed name from the feed title when not supplied.
+
+    Returns 400 if the URL already exists in the feed list.
+    Returns 422 if the URL does not parse as a valid RSS feed.
+    """
+    import feedparser as _fp
+    url = body.url.strip()
+
+    # Duplicate check
+    existing = {f["url"] for f in feed_store.read_feeds()}
+    if url in existing:
+        raise HTTPException(status_code=400, detail="Feed URL already exists")
+
+    # Validate — fetch and parse
+    parsed = _fp.parse(url)
+    if parsed.bozo and not parsed.entries:
+        raise HTTPException(status_code=422, detail="Not a valid RSS feed")
+
+    name = body.name or parsed.feed.get("title") or url
+    try:
+        return feed_store.add_feed(url, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/api/feeds/{feed_id}")
+def update_feed(feed_id: str, body: FeedUpdate):
+    """
+    Update a feed's name or enabled flag.
+    Returns 404 if the feed is not found.
+    """
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "cutoff_days" in updates:
+        updates["cutoff_days"] = max(1, min(365, int(updates["cutoff_days"])))
+    result = feed_store.update_feed(feed_id, updates)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    return result
+
+
+@app.delete("/api/feeds/{feed_id}")
+def delete_feed(feed_id: str, purge_data: bool = Query(False)):
+    """
+    Remove a feed from the configuration.
+
+    When ``purge_data=true``, also permanently deletes all CPE entries whose
+    ``source`` field matches the feed's name (including their proof images).
+    Returns 404 if the feed is not found.
+    Returns 204 when purge_data is False, or a JSON summary when True.
+    """
+    feeds = feed_store.read_feeds()
+    feed = next((f for f in feeds if f["id"] == feed_id), None)
+    if feed is None:
+        raise HTTPException(status_code=404, detail="Feed not found")
+
+    feed_store.delete_feed(feed_id)
+
+    if purge_data:
+        purged = storage.purge_entries_by_source(feed["name"])
+        return {"purged": purged}
+
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
 # Fetch / export / summary
 # ---------------------------------------------------------------------------
 
@@ -294,7 +395,7 @@ def trigger_fetch():
     - ``added``:   number of new entries inserted (duplicates skipped)
     """
     from rss import fetch_all
-    entries = fetch_all()
+    entries = fetch_all(feed_store.read_feeds())
     added = storage.add_entries(entries)
     return {"fetched": len(entries), "added": len(added)}
 

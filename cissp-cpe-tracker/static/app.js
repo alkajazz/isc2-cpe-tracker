@@ -77,9 +77,26 @@ function applyTheme(name) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Light / dark mode
+// ---------------------------------------------------------------------------
+
+function toggleMode() {
+  const next = document.documentElement.dataset.mode === "light" ? "dark" : "light";
+  applyMode(next);
+}
+
+function applyMode(mode) {
+  if (mode === "light") document.documentElement.dataset.mode = "light";
+  else                  delete document.documentElement.dataset.mode;
+  localStorage.setItem("cpe_mode", mode);
+  const btn = $("btn-mode-toggle");
+  if (btn) btn.textContent = mode === "light" ? "Dark" : "Light";
+}
+
 // --- State ---
 let allRows = [];
-let filters = { domain: "", status: "pending", type: "", date_from: "", date_to: "" };
+let filters = { domain: "", status: "", type: "", date_from: "", date_to: "" };
 let activeISC2RowId = null;
 let sortCol = null;
 let sortDir = null;
@@ -463,6 +480,7 @@ async function loadCPEs() {
   if (filters.date_to)   params.set("date_to", filters.date_to);
   const qs = params.toString();
   allRows = await apiFetch("/api/cpes" + (qs ? "?" + qs : ""));
+  _renderSidebarFromRows(allRows);
   renderTable();
 }
 
@@ -692,6 +710,58 @@ async function deleteProof() {
  * Fetch aggregated stats from GET /api/summary and update the four summary
  * cards and the domain-hours breakdown list.
  */
+/**
+ * Render domain bar chart from a {domain: hours} map.
+ * Extracted so it can be reused by both API-based and client-side paths.
+ */
+function _renderDomainBars(byDomain) {
+  const dl = $("domain-list");
+  if (!dl) return;
+  const entries = Object.entries(byDomain).sort((a, b) => b[1] - a[1]);
+  const maxH = entries[0]?.[1] || 1;
+  dl.innerHTML = entries.map(([d, h]) => {
+    const pct = Math.round((h / maxH) * 100);
+    return `<div class="domain-row">
+      <div class="domain-row-header">
+        <span class="domain-row-name" title="${escHtml(d)}">${escHtml(d)}</span>
+        <span class="domain-row-hours">${h.toFixed(1)}h</span>
+      </div>
+      <div class="domain-bar-track">
+        <div class="domain-bar-fill" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join("");
+  if (!entries.length) {
+    dl.innerHTML = `<div style="color:var(--text-dim);font-size:11px">No data</div>`;
+  }
+}
+
+/**
+ * Compute summary stats from the current filtered row set and update the sidebar.
+ * Replaces the API-based loadSummary() for the dashboard view.
+ */
+function _renderSidebarFromRows(rows) {
+  let totalHours = 0;
+  const byDomain = {};
+  const byStatus = {};
+  for (const r of rows) {
+    const h = parseFloat(r.cpe_hours) || 0;
+    totalHours += h;
+    const st = r.status || "pending";
+    byStatus[st] = (byStatus[st] || 0) + 1;
+    const domainsStr = r.domains || r.domain || "Unknown";
+    for (const d of domainsStr.split("|")) {
+      const dn = d.trim();
+      if (dn) byDomain[dn] = (byDomain[dn] || 0) + h;
+    }
+  }
+  const th = $("total-hours");   if (th) th.textContent = totalHours.toFixed(1);
+  const te = $("total-entries"); if (te) te.textContent = rows.length;
+  const ac = $("approved-count");if (ac) ac.textContent = byStatus.submitted || 0;
+  const pc = $("pending-count"); if (pc) pc.textContent = byStatus.pending   || 0;
+  _renderDomainBars(byDomain);
+}
+
 async function loadSummary() {
   try {
     const s = await apiFetch("/api/summary");
@@ -699,22 +769,7 @@ async function loadSummary() {
     $("total-entries").textContent  = s.total_entries;
     $("approved-count").textContent = s.by_status.submitted || 0;
     $("pending-count").textContent  = s.by_status.pending  || 0;
-
-    const dl = $("domain-list");
-    const entries = Object.entries(s.by_domain).sort((a, b) => b[1] - a[1]);
-    const maxH = entries[0]?.[1] || 1;
-    dl.innerHTML = entries.map(([d, h]) => {
-      const pct = Math.round((h / maxH) * 100);
-      return `<div class="domain-row">
-        <div class="domain-row-header">
-          <span class="domain-row-name" title="${escHtml(d)}">${escHtml(d)}</span>
-          <span class="domain-row-hours">${h.toFixed(1)}h</span>
-        </div>
-        <div class="domain-bar-track">
-          <div class="domain-bar-fill" style="width:${pct}%"></div>
-        </div>
-      </div>`;
-    }).join("");
+    _renderDomainBars(s.by_domain);
   } catch (e) { console.error("Summary error", e); }
 }
 
@@ -1188,6 +1243,32 @@ function clearFilters() {
   loadCPEs();
 }
 
+/**
+ * Set the date range filter to a named preset and apply filters.
+ * @param {"7d"|"cur-month"|"prev-month"|"cur-year"|"prev-year"} preset
+ */
+function setDatePreset(preset) {
+  const now = new Date();
+  let from, to = now;
+  if (preset === "7d") {
+    from = new Date(now); from.setDate(from.getDate() - 6);
+  } else if (preset === "cur-month") {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (preset === "prev-month") {
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    to   = new Date(now.getFullYear(), now.getMonth(), 0);
+  } else if (preset === "cur-year") {
+    from = new Date(now.getFullYear(), 0, 1);
+  } else if (preset === "prev-year") {
+    from = new Date(now.getFullYear() - 1, 0, 1);
+    to   = new Date(now.getFullYear() - 1, 11, 31);
+  }
+  const fmt = d => d.toISOString().slice(0, 10);
+  $("filter-from").value = fmt(from);
+  $("filter-to").value   = fmt(to);
+  applyFilters();
+}
+
 // ---------------------------------------------------------------------------
 // Add CPE form
 // ---------------------------------------------------------------------------
@@ -1254,6 +1335,9 @@ async function submitAddForm(e) {
  * then fetches the summary and CPE rows in parallel.
  */
 async function init() {
+  // Apply saved light/dark mode (before first paint)
+  applyMode(localStorage.getItem("cpe_mode") || "dark");
+
   // Apply saved (or default) colour theme before first render
   applyTheme(localStorage.getItem("cpe_theme") || "amber");
 
@@ -1266,7 +1350,7 @@ async function init() {
   renderHeaders();
   buildFilterBar();
   buildAddForm();
-  $("filter-status").value = "pending";
+  $("filter-status").value = "";
 
   $("btn-fetch").addEventListener("click", fetchNow);
   $("btn-export").addEventListener("click", exportCSV);
@@ -1288,7 +1372,6 @@ async function init() {
     }
   });
 
-  await loadSummary();
   await loadCPEs();
 }
 

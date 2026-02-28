@@ -32,10 +32,13 @@ def _fetch_job():
 
     Imports are deferred inside the function body to avoid circular
     import issues at module load time (rss → storage → … → scheduler).
+    Feeds are loaded from ``feed_store`` at call time so any changes made
+    via the admin UI take effect on the next scheduled run without a restart.
     """
     from rss import fetch_all
     from storage import add_entries
-    entries = fetch_all()
+    from feed_store import read_feeds
+    entries = fetch_all(read_feeds())
     added = add_entries(entries)
     print(f"[Scheduler] Fetched {len(entries)} items, added {len(added)} new entries")
 
