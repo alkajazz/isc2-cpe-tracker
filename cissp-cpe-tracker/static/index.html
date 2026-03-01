@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cybersecurity CPE Tracker</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    /* FOUC prevention — apply saved mode before CSS paints */
+    (function(){
+      var m = localStorage.getItem("cpe_mode") || "dark";
+      if (m === "light") document.documentElement.dataset.mode = "light";
+    })();
+  </script>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg class="header-seal" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 2 L28 6.5 L28 17.5 Q28 26 16 30 Q4 26 4 17.5 L4 6.5 Z"
+        stroke-width="1.2" style="fill:var(--accent-dim);stroke:var(--accent)"/>
+      <path d="M16 5.5 L25 9 L25 17.5 Q25 24 16 27 Q7 24 7 17.5 L7 9 Z"
+        fill="none" stroke-width="0.6" style="stroke:var(--accent-line)"/>
+      <text x="16" y="18.5" text-anchor="middle"
+        font-family="DM Sans, system-ui, sans-serif" font-size="7" font-weight="700" letter-spacing="0.1em"
+        style="fill:var(--accent-bright)">CPE</text>
+    </svg>
+    <div class="header-title">
+      <h1>Cybersecurity CPE Tracker</h1>
+      <span class="header-subtitle">Continuing Professional Education</span>
+    </div>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="header-nav-link active">Dashboard</a>
+    <a href="/config.html" class="header-nav-link">Config</a>
+    <a href="/admin.html" class="header-nav-link">Admin</a>
+    <a href="/storage.html" class="header-nav-link">Storage</a>
+    <div class="header-vsep"></div>
+    <button id="btn-mode-toggle" class="btn-secondary btn-sm" onclick="toggleMode()">Light</button>
+  </nav>
+  <div class="header-actions"></div>
+</header>
+
+<div class="app-layout">
+
+  <!-- Sidebar: stats + domain breakdown -->
+  <aside class="sidebar">
+
+    <div class="stat-primary">
+      <div class="stat-number" id="total-hours">—</div>
+      <div class="stat-label">Total CPE Hours</div>
+      <div id="bundled-hours-note" style="display:none;font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.4"></div>
+    </div>
+
+    <div class="stat-rule"></div>
+
+    <div class="stat-secondary-grid">
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="total-entries">—</div>
+        <div class="stat-label">Entries</div>
+      </div>
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="approved-count">—</div>
+        <div class="stat-label">Submitted</div>
+      </div>
+      <div class="stat-secondary">
+        <div class="stat-number-sm" id="pending-count">—</div>
+        <div class="stat-label">Pending</div>
+      </div>
+    </div>
+
+    <div class="stat-rule"></div>
+    <div class="domain-section-label">By Certification</div>
+    <div id="vendor-stats" class="vendor-stats-list">
+      <div style="color:var(--text-dim);font-size:11px">Loading…</div>
+    </div>
+
+
+  </aside>
+
+  <!-- Main area: filters + table -->
+  <div class="main-area">
+
+    <!-- Add CPE Form -->
+    <div class="add-form" id="add-form">
+      <h3>Add CPE Entry</h3>
+      <form id="add-cpe-form">
+        <div class="form-grid">
+          <div class="form-field" style="grid-column: span 2">
+            <label>Title *</label>
+            <input id="add-title" type="text" placeholder="Episode or article title" required>
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>URL</label>
+            <input id="add-url" type="text" placeholder="https://…">
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>Description</label>
+            <textarea id="add-description" placeholder="Brief summary…"></textarea>
+          </div>
+          <div class="form-field">
+            <label>Type</label>
+            <select id="add-type">
+              <option value="podcast">Podcast</option>
+              <option value="article">Article</option>
+              <option value="webinar">Webinar</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Duration *</label>
+            <input id="add-duration" type="text" placeholder="e.g. 1h 30m, 1:30:00, 90m" required>
+            <div class="form-hint">CPE hours auto-calculated from duration</div>
+          </div>
+          <div class="form-field">
+            <label>CPE Hours</label>
+            <input id="add-hours" type="number" min="0.25" max="40" step="0.25" value="1.0">
+          </div>
+          <div class="form-field">
+            <label>Presenter</label>
+            <input id="add-presenter" type="text" placeholder="e.g. Steve Gibson">
+          </div>
+          <div class="form-field">
+            <label>Published Date</label>
+            <input id="add-pubdate" type="date">
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>Domains (select all that apply)</label>
+            <div id="add-domain-checks" class="domain-check-grid"></div>
+          </div>
+          <div class="form-field" style="grid-column: span 2">
+            <label>Notes</label>
+            <input id="add-notes" type="text" placeholder="Optional notes…">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">Add Entry</button>
+          <button type="button" class="btn-secondary"
+            onclick="document.getElementById('add-form').classList.remove('open')">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Domain</label>
+        <select id="filter-domain"><option value="">All Domains</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Status</label>
+        <select id="filter-status">
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="submitted">Submitted</option>
+          <option value="archived">Archived</option>
+          <option value="deleted">🗑 Trash</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Type</label>
+        <select id="filter-type">
+          <option value="">All</option>
+          <option value="podcast">Podcast</option>
+          <option value="article">Article</option>
+          <option value="webinar">Webinar</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Source</label>
+        <select id="filter-source"><option value="">All Sources</option></select>
+      </div>
+      <div class="filter-group">
+        <label>From</label>
+        <input type="date" id="filter-from">
+      </div>
+      <div class="filter-group">
+        <label>To</label>
+        <input type="date" id="filter-to">
+      </div>
+      <div class="filter-group" style="justify-content:flex-end">
+        <label class="proof-filter-label">
+          <input type="checkbox" id="filter-has-proof"> Has proof
+        </label>
+      </div>
+      <div class="filter-group" style="flex-direction:row;gap:6px;margin-top:auto">
+        <button id="btn-filter" class="btn-primary btn-sm">Apply</button>
+        <button id="btn-clear-filters" class="btn-secondary btn-sm">Clear</button>
+      </div>
+      <div class="date-presets" style="flex-basis:100%">
+        <span style="font-size:11px;color:var(--text-dim);margin-right:4px">Quick:</span>
+        <button class="preset-chip" onclick="setDatePreset('7d')">7 days</button>
+        <button class="preset-chip" onclick="setDatePreset('cur-month')">This month</button>
+        <button class="preset-chip" onclick="setDatePreset('prev-month')">Last month</button>
+        <button class="preset-chip" onclick="setDatePreset('cur-year')">This year</button>
+        <button class="preset-chip" onclick="setDatePreset('prev-year')">Last year</button>
+      </div>
+    </div>
+
+    <!-- Table toolbar -->
+    <div class="table-toolbar">
+      <span id="row-count"></span>
+      <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+        <button id="btn-add" class="btn-secondary btn-sm">＋ Add Entry</button>
+        <button id="btn-fetch" class="btn-primary btn-sm">↻ Fetch Now</button>
+        <div class="header-vsep"></div>
+        <button id="btn-export" class="btn-secondary btn-sm">↓ Export CSV</button>
+        <button id="btn-export-pdf" class="btn-secondary btn-sm" onclick="exportVisiblePDF()">↓ Export PDF</button>
+        <div class="header-vsep"></div>
+        <button id="btn-columns" class="btn-secondary btn-sm">Columns &#9660;</button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="col-headers"></tr>
+        </thead>
+        <tbody id="cpe-tbody">
+          <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- Hidden file input for proof upload -->
+<input type="file" id="proof-file-input" accept="image/*" style="display:none">
+
+<!-- CPE Submission Modal -->
+<div id="submit-modal" class="modal-overlay" onclick="if(event.target===this)closeSubmitModal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <h3>Submission Fields</h3>
+      <button class="btn-secondary btn-sm" onclick="closeSubmitModal()">Close</button>
+    </div>
+    <div class="modal-body">
+
+      <div id="submit-webinar-notice" class="submit-webinar-notice" style="display:none">
+        <strong>Webinar submission</strong> — Upload proof before marking as submitted.
+        CompTIA <strong>requires</strong> proof of registration or completion.
+        ISACA <strong>recommends</strong> keeping proof of completion (screenshot or certificate).
+      </div>
+
+      <div class="submit-field">
+        <label>Title</label>
+        <div class="submit-value" id="submit-title"></div>
+        <div class="submit-actions">
+          <button class="btn-secondary btn-sm" onclick="copySubmitField('submit-title')">Copy</button>
+        </div>
+      </div>
+
+      <div class="submit-field">
+        <label>Presenter</label>
+        <div class="submit-value" id="submit-presenter"></div>
+        <div class="submit-actions">
+          <button class="btn-secondary btn-sm" onclick="copySubmitField('submit-presenter')">Copy</button>
+        </div>
+      </div>
+
+      <div class="submit-field">
+        <label>Year Published</label>
+        <div class="submit-value" id="submit-year"></div>
+        <div class="submit-actions">
+          <button class="btn-secondary btn-sm" onclick="copySubmitField('submit-year')">Copy</button>
+        </div>
+      </div>
+
+      <div id="submit-cpe-fields"></div>
+
+      <div class="submit-field submit-field--summary">
+        <label>Summary
+          <span style="color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;font-size:10px">
+            (edit to your own words)
+          </span>
+        </label>
+        <textarea class="submit-value" id="submit-summary"
+          placeholder="Write 2-3 sentences describing what you learned from this episode…"
+          onblur="saveSummary()"></textarea>
+        <div class="submit-actions">
+          <button class="btn-secondary btn-sm" onclick="copySubmitField('submit-summary')">Copy</button>
+          <button class="btn-secondary btn-sm" id="btn-use-description" style="display:none"
+            onclick="useEpisodeDescription()">&#8635; Use feed description</button>
+        </div>
+      </div>
+
+      <div class="submit-field" id="submit-proof-section">
+        <label>Completion Proof
+          <span style="color:var(--text-dim);font-weight:400;letter-spacing:0;text-transform:none;font-size:10px">
+            (screenshot near end)
+          </span>
+        </label>
+        <div id="submit-proof-preview" class="proof-preview-area"></div>
+        <div class="submit-actions">
+          <button class="btn-secondary btn-sm" id="btn-submit-upload-proof" onclick="triggerProofUpload()">Upload Screenshot</button>
+          <button class="btn-danger btn-sm" id="btn-submit-delete-proof" style="display:none" onclick="deleteProof()">Remove</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="col-picker" class="col-picker"></div>
+<!-- Bulk action bar — appears when rows are selected -->
+<div id="bulk-bar" class="bulk-bar">
+  <span id="bulk-count" class="bulk-bar-count">0 selected</span>
+  <div class="bulk-bar-sep"></div>
+
+  <!-- Edit section: hidden in trash view -->
+  <div id="bulk-edit-section" style="display:flex;align-items:center;gap:8px">
+    <select id="bulk-field" onchange="updateBulkValueInput()">
+      <option value="">Set field&hellip;</option>
+      <option value="status">Status</option>
+      <option value="domains">Domain</option>
+      <option value="cpe_hours">CPE Hours</option>
+    </select>
+    <div id="bulk-value-wrap"></div>
+    <button class="btn-primary btn-sm" onclick="bulkApply()">Apply</button>
+    <div class="bulk-bar-sep"></div>
+  </div>
+
+  <!-- Restore: only in trash view -->
+  <button id="bulk-restore-btn" class="btn-secondary btn-sm" style="display:none" onclick="bulkRestore()">Restore Selected</button>
+
+  <button id="bulk-delete-btn" class="btn-danger" onclick="bulkDelete()">Delete Selected</button>
+  <div class="bulk-bar-sep"></div>
+  <button class="btn-secondary btn-sm" onclick="exportPDF()">&#8595; Export PDF</button>
+  <button class="btn-secondary btn-sm" onclick="clearSelection()">Clear</button>
+</div>
+
+<!-- Macrodata Refinement Minigame -->
+<div id="mdr-overlay" class="mdr-overlay" style="display:none">
+  <div class="mdr-terminal">
+    <div class="mdr-top-bar">
+      <div class="mdr-corp-id">
+        <span class="mdr-lumon">CPE INDUSTRIES</span>
+        <span class="mdr-dept">MACRODATA REFINEMENT DIVISION</span>
+      </div>
+      <div class="mdr-file-meta">
+        <span class="mdr-file-lbl">FILE</span>
+        <span id="mdr-file-id" class="mdr-file-id">MDR-0000</span>
+        <span id="mdr-pct" class="mdr-pct">0%</span>
+      </div>
+      <button class="mdr-close-btn" onclick="closeMDR()">✕</button>
+    </div>
+    <div class="mdr-grid" id="mdr-grid"></div>
+    <div class="mdr-bins-row" id="mdr-bins-row"></div>
+    <div class="mdr-footer">
+      <span class="mdr-status" id="mdr-status-msg">Select a number to begin refinement.</span>
+      <span class="mdr-kbd-hint">Hover to feel · Esc closes</span>
+    </div>
+    <div class="mdr-victory" id="mdr-victory" style="display:none">
+      <div class="mdr-vic-check">✓</div>
+      <div class="mdr-vic-title">FILE COMPLETE</div>
+      <div class="mdr-vic-body">Your diligence has been noted. The Board is pleased.<br>You have earned one (1) melon bar.</div>
+      <button class="mdr-vic-btn" onclick="closeMDR()">Return to Work</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+services:
+  cissp-cpe-tracker:
+    build: .
+    ports:
+      - "8081:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
