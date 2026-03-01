@@ -53,8 +53,9 @@
 
     <div class="stat-primary">
       <div class="stat-number" id="total-hours">—</div>
-      <div class="stat-label">Total CPE Hours</div>
+      <div class="stat-label">Submitted CPE Hours</div>
       <div id="bundled-hours-note" style="display:none;font-size:10px;color:var(--text-dim);margin-top:3px;line-height:1.4"></div>
+      <div id="pending-cpe-hours" style="display:none;font-size:10px;color:var(--accent);margin-top:3px;line-height:1.4"></div>
     </div>
 
     <div class="stat-rule"></div>
@@ -73,6 +74,8 @@
         <div class="stat-label">Pending</div>
       </div>
     </div>
+
+    <div id="missing-proof-alert" style="display:none;margin-top:10px;padding:7px 10px;border-radius:6px;font-size:11px;font-weight:600;background:rgba(220,100,0,0.12);color:#d06010;border:1px solid rgba(220,100,0,0.3);line-height:1.4;cursor:default" title="Submitted entries without a proof screenshot attached"></div>
 
     <div class="stat-rule"></div>
     <div class="domain-section-label">By Certification</div>

@@ -837,10 +837,12 @@ function renderTable() {
 
     const isSelected = selectedIds.has(row.id);
     const isTrash = filters.status === "deleted";
+    const missingProof = row.status === "submitted" && !row.proof_image;
+    const rowClass = [isSelected ? "row-selected" : "", missingProof ? "row-missing-proof" : ""].filter(Boolean).join(" ");
     const actionCell = isTrash
       ? `<td class="td-delete" style="white-space:nowrap"><button class="btn-secondary btn-sm" onclick="restoreCPE('${row.id}')">Restore</button> <button class="btn-danger btn-sm" onclick="purgeCPE('${row.id}')">Purge</button></td>`
       : `<td class="td-delete"><button class="btn-danger" onclick="deleteCPE('${row.id}')">Delete</button></td>`;
-    return `<tr data-id="${row.id}"${isSelected ? ' class="row-selected"' : ''}>
+    return `<tr data-id="${row.id}"${rowClass ? ` class="${rowClass}"` : ''}>
       <td class="td-check"><input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleRowSelect('${row.id}', this.checked)"></td>
       ${cells}${actionCell}</tr>`;
   }).join("");
@@ -1073,35 +1075,45 @@ async function deleteProof() {
  * Compute summary stats from the current filtered row set and update the sidebar.
  */
 function _renderSidebarFromRows(rows) {
-  let normalHours = 0;
+  let submittedHours = 0;
+  let pendingHours = 0;
+  let missingProofCount = 0;
   const byStatus = {};
   const byVendor = {};
-  const shortRows = [];
+  const shortSubmitted = [];
+  const shortPending = [];
 
   for (const r of rows) {
     const short = isShortEntry(r);
-    if (short) { shortRows.push(r); }
     const h = short ? 0 : (parseFloat(r.cpe_hours) || 0);
-    normalHours += h;
     const st = r.status || "pending";
     byStatus[st] = (byStatus[st] || 0) + 1;
-    if (!short) {
+    if (st === "submitted" && !r.proof_image) missingProofCount++;
+    if (short) {
+      if (st === "submitted") shortSubmitted.push(r);
+      else if (st === "pending") shortPending.push(r);
+    } else if (st === "submitted") {
+      submittedHours += h;
       for (const vid of VENDOR_IDS) {
         if (activeVendors.has(vid) && vendorAcceptsType(vid, r.type)) {
           byVendor[vid] = (byVendor[vid] || 0) + h;
         }
       }
+    } else if (st === "pending") {
+      pendingHours += h;
     }
   }
 
-  // Add bundled short-entry CPE to total and to ISC²/all-type vendors
-  const bundledHours = _bundledShortCPE(shortRows);
-  const totalHours = normalHours + bundledHours;
-  if (bundledHours > 0) {
+  // Bundled CPE from short entries — submitted only for grand total; pending separately
+  const bundledSubmitted = _bundledShortCPE(shortSubmitted);
+  const bundledPending   = _bundledShortCPE(shortPending);
+  const totalHours       = submittedHours + bundledSubmitted;
+  const totalPending     = pendingHours   + bundledPending;
+
+  if (bundledSubmitted > 0) {
     for (const vid of VENDOR_IDS) {
-      // Short RSS entries are podcasts — only count for vendors that accept all types (e.g. ISC²)
       if (activeVendors.has(vid) && VENDOR_TYPES[vid] === null) {
-        byVendor[vid] = (byVendor[vid] || 0) + bundledHours;
+        byVendor[vid] = (byVendor[vid] || 0) + bundledSubmitted;
       }
     }
   }
@@ -1111,11 +1123,34 @@ function _renderSidebarFromRows(rows) {
   const ac = $("approved-count");if (ac) ac.textContent = byStatus.submitted || 0;
   const pc = $("pending-count"); if (pc) pc.textContent = byStatus.pending   || 0;
 
+  // Missing proof alert
+  const mp = $("missing-proof-alert");
+  if (mp) {
+    if (missingProofCount > 0) {
+      mp.textContent = `⚠ ${missingProofCount} submitted entr${missingProofCount === 1 ? "y" : "ies"} missing proof`;
+      mp.style.display = "";
+    } else {
+      mp.style.display = "none";
+    }
+  }
+
+  // Pending CPE hours note
+  const ph = $("pending-cpe-hours");
+  if (ph) {
+    if (totalPending > 0) {
+      ph.textContent = `+${totalPending.toFixed(2)} waiting to be claimed`;
+      ph.style.display = "";
+    } else {
+      ph.style.display = "none";
+    }
+  }
+
+  // Bundled note — submitted short entries only
   const bn = $("bundled-hours-note");
   if (bn) {
-    if (bundledHours > 0) {
-      const totalMins = Math.round(shortRows.reduce((s, r) => s + (parseDurationMinutes(r.duration) || 0), 0));
-      bn.textContent = `+${bundledHours.toFixed(2)} bundled (${shortRows.length} short entr${shortRows.length === 1 ? "y" : "ies"}, ${totalMins}m combined)`;
+    if (bundledSubmitted > 0) {
+      const totalMins = Math.round(shortSubmitted.reduce((s, r) => s + (parseDurationMinutes(r.duration) || 0), 0));
+      bn.textContent = `+${bundledSubmitted.toFixed(2)} bundled (${shortSubmitted.length} short entr${shortSubmitted.length === 1 ? "y" : "ies"}, ${totalMins}m combined)`;
       bn.style.display = "";
     } else {
       bn.style.display = "none";
@@ -1148,25 +1183,8 @@ function _renderVendorStats(byVendor) {
   || `<div style="color:var(--text-dim);font-size:11px">No modes selected</div>`;
 }
 
-async function loadSummary() {
-  try {
-    const s = await apiFetch("/api/summary");
-    $("total-hours").textContent    = s.total_hours.toFixed(2);
-    $("total-entries").textContent  = s.total_entries;
-    $("approved-count").textContent = s.by_status.submitted || 0;
-    $("pending-count").textContent  = s.by_status.pending  || 0;
-    // Compute per-vendor totals from current rawRows (respects VENDOR_TYPES restrictions)
-    const byVendor = {};
-    for (const r of rawRows) {
-      const h = parseFloat(r.cpe_hours) || 0;
-      for (const vid of VENDOR_IDS) {
-        if (activeVendors.has(vid) && vendorAcceptsType(vid, r.type)) {
-          byVendor[vid] = (byVendor[vid] || 0) + h;
-        }
-      }
-    }
-    _renderVendorStats(byVendor);
-  } catch (e) { console.error("Summary error", e); }
+function loadSummary() {
+  _renderSidebarFromRows(allRows);
 }
 
 // ---------------------------------------------------------------------------
@@ -1202,8 +1220,13 @@ async function updateField(id, field, value) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [field]: value }),
     });
+    // Patch local rows so sidebar reflects the change without a full reload
+    for (const arr of [rawRows, allRows]) {
+      const r = arr.find(r => r.id === id);
+      if (r) r[field] = value;
+    }
     showToast("Saved");
-    await loadSummary();
+    loadSummary();
   } catch (e) {
     showToast("Save failed: " + e.message, "error");
   }

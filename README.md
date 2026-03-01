@@ -14,7 +14,7 @@ Supports **3 major cybersecurity certification vendors** out of the box — CPE 
 
 > **Default feed:** Security Now (`feeds.twit.tv/sn.xml`) is pre-configured. Add any RSS/Atom podcast feed from the Config page. Manual entries can be added for any CPE source — courses, articles, conferences, webinars, etc.
 
-![Version](https://img.shields.io/badge/version-3.4-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-3.5-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 

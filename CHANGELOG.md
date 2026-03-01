@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.5 — 2026-02-28
+
+### Added
+- **Missing-proof highlight** — submitted entries without a proof screenshot are highlighted with an amber left border in the table for quick visual identification
+- **Missing-proof sidebar alert** — an orange warning badge appears in the sidebar showing how many submitted entries are missing a proof attachment; updates instantly as entries are filtered, statuses changed, or proof uploaded
+- **Submitted-only CPE total** — the sidebar grand total now counts only submitted CPE hours; pending hours are shown separately as "+X.XX waiting to be claimed" in amber below the total
+
+### Changed
+- Sidebar "Total CPE Hours" label renamed to "Submitted CPE Hours" to reflect that only submitted entries are counted
+- `loadSummary` is now fully client-side (no separate `/api/summary` call for sidebar stats); all sidebar values are derived from the current filtered row set
+
 ## v3.4 — 2026-02-28
 
 ### Added

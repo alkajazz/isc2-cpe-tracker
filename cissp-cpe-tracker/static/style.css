@@ -756,6 +756,8 @@ select.editable { cursor: pointer; }
 
 tbody tr.row-selected { background: var(--accent-dim-subtle) !important; }
 tbody tr.row-selected:hover { background: var(--accent-dim) !important; }
+tbody tr.row-missing-proof { border-left: 3px solid #d06010; }
+tbody tr.row-missing-proof:hover { background: rgba(208,96,16,0.07) !important; }
 
 /* ============================================================
    BULK ACTION BAR
