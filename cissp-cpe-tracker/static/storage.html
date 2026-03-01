@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cybersecurity CPE Tracker — Storage</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    /* FOUC prevention — apply saved mode before CSS paints */
+    (function(){
+      var m = localStorage.getItem("cpe_mode") || "dark";
+      if (m === "light") document.documentElement.dataset.mode = "light";
+    })();
+  </script>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <svg class="header-seal" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 2 L28 6.5 L28 17.5 Q28 26 16 30 Q4 26 4 17.5 L4 6.5 Z"
+        stroke-width="1.2" style="fill:var(--accent-dim);stroke:var(--accent)"/>
+      <path d="M16 5.5 L25 9 L25 17.5 Q25 24 16 27 Q7 24 7 17.5 L7 9 Z"
+        fill="none" stroke-width="0.6" style="stroke:var(--accent-line)"/>
+      <text x="16" y="18.5" text-anchor="middle"
+        font-family="DM Sans, system-ui, sans-serif" font-size="7" font-weight="700" letter-spacing="0.1em"
+        style="fill:var(--accent-bright)">CPE</text>
+    </svg>
+    <div class="header-title">
+      <h1>Cybersecurity CPE Tracker</h1>
+      <span class="header-subtitle">Continuing Professional Education</span>
+    </div>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="header-nav-link">Dashboard</a>
+    <a href="/config.html" class="header-nav-link">Config</a>
+    <a href="/admin.html" class="header-nav-link">Admin</a>
+    <a href="/storage.html" class="header-nav-link active">Storage</a>
+    <div class="header-vsep"></div>
+    <button id="btn-mode-toggle" class="btn-secondary btn-sm" onclick="toggleMode()">Light</button>
+  </nav>
+  <div class="header-actions">
+    <div class="theme-palette" aria-label="Accent colour">
+      <button class="theme-swatch" data-theme="amber" style="background:#e8950f" title="Amber"></button>
+      <button class="theme-swatch" data-theme="red"    style="background:#e04444" title="Red"></button>
+      <button class="theme-swatch" data-theme="green"  style="background:#27ae63" title="Green"></button>
+      <button class="theme-swatch" data-theme="blue"   style="background:#2389d4" title="Blue"></button>
+      <button class="theme-swatch" data-theme="purple" style="background:#8b52e0" title="Purple"></button>
+      <button class="theme-swatch" data-theme="cyan"   style="background:#12b0b0" title="Cyan"></button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="summary-grid" id="storage-cards">
+    <div class="card">
+      <div class="label">Total Storage</div>
+      <div class="value" id="stat-total-mb">—</div>
+      <div class="sub" id="stat-total-kb"></div>
+    </div>
+    <div class="card">
+      <div class="label">Screenshots</div>
+      <div class="value" id="stat-file-count">—</div>
+      <div class="sub">proof files</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg Size</div>
+      <div class="value" id="stat-avg-kb">—</div>
+      <div class="sub">KB per file</div>
+    </div>
+    <div class="card">
+      <div class="label">CSV (cpes.csv)</div>
+      <div class="value" id="stat-csv-kb">—</div>
+      <div class="sub" id="stat-csv-rows"></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="storage-table">
+      <thead>
+        <tr>
+          <th>CPE Title</th>
+          <th>Filename</th>
+          <th>Size</th>
+          <th>Preview</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="storage-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-dim)">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Theme — must match THEMES object in app.js exactly
+// ---------------------------------------------------------------------------
+const THEMES = {
+  amber:  { accent: "#c97d10", bright: "#e8950f", dim10: "rgba(201,125,16,0.10)", dim13: "rgba(201,125,16,0.13)", dim06: "rgba(201,125,16,0.06)", line: "rgba(201,125,16,0.30)" },
+  red:    { accent: "#b83232", bright: "#e04444", dim10: "rgba(184,50,50,0.10)",   dim13: "rgba(184,50,50,0.13)",   dim06: "rgba(184,50,50,0.06)",   line: "rgba(184,50,50,0.30)"   },
+  green:  { accent: "#1e8a4c", bright: "#27ae63", dim10: "rgba(30,138,76,0.10)",   dim13: "rgba(30,138,76,0.13)",   dim06: "rgba(30,138,76,0.06)",   line: "rgba(30,138,76,0.30)"   },
+  blue:   { accent: "#1a6fab", bright: "#2389d4", dim10: "rgba(26,111,171,0.10)",  dim13: "rgba(26,111,171,0.13)",  dim06: "rgba(26,111,171,0.06)",  line: "rgba(26,111,171,0.30)"  },
+  purple: { accent: "#6e3abf", bright: "#8b52e0", dim10: "rgba(110,58,191,0.10)",  dim13: "rgba(110,58,191,0.13)",  dim06: "rgba(110,58,191,0.06)",  line: "rgba(110,58,191,0.30)"  },
+  cyan:   { accent: "#0d8a8a", bright: "#12b0b0", dim10: "rgba(13,138,138,0.10)",  dim13: "rgba(13,138,138,0.13)",  dim06: "rgba(13,138,138,0.06)",  line: "rgba(13,138,138,0.30)"  },
+};
+
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.amber;
+  const r = document.documentElement.style;
+  r.setProperty("--accent",            t.accent);
+  r.setProperty("--accent-bright",     t.bright);
+  r.setProperty("--accent-dim",        t.dim10);
+  r.setProperty("--warning-dim",       t.dim13);
+  r.setProperty("--accent-dim-subtle", t.dim06);
+  r.setProperty("--accent-line",       t.line);
+  localStorage.setItem("cpe_theme", name);
+  document.querySelectorAll(".theme-swatch").forEach(sw => {
+    sw.classList.toggle("active", sw.dataset.theme === name);
+  });
+}
+
+function toggleMode() {
+  const next = document.documentElement.dataset.mode === "light" ? "dark" : "light";
+  applyMode(next);
+}
+
+function applyMode(mode) {
+  if (mode === "light") document.documentElement.dataset.mode = "light";
+  else                  delete document.documentElement.dataset.mode;
+  localStorage.setItem("cpe_mode", mode);
+  const btn = document.getElementById("btn-mode-toggle");
+  if (btn) btn.textContent = mode === "light" ? "Dark" : "Light";
+}
+
+// Apply saved theme and mode immediately (before paint)
+applyTheme(localStorage.getItem("cpe_theme") || "amber");
+applyMode(localStorage.getItem("cpe_mode") || "dark");
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".theme-swatch").forEach(sw => {
+    sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+function $(id) { return document.getElementById(id); }
+
+function showToast(msg, type = "success") {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ""; }, 3000);
+}
+
+function escHtml(str) {
+  return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function fmtSize(kb) {
+  if (kb >= 1024) return (kb / 1024).toFixed(2) + " MB";
+  return kb.toFixed(1) + " KB";
+}
+
+async function loadStorage() {
+  const res = await fetch("/api/admin/storage");
+  const data = await res.json();
+
+  $("stat-total-mb").textContent = data.total_size_mb.toFixed(2) + " MB";
+  $("stat-total-kb").textContent = data.total_size_kb.toFixed(1) + " KB total";
+  $("stat-file-count").textContent = data.file_count;
+  const avg = data.file_count > 0 ? (data.total_size_kb / data.file_count).toFixed(1) : "0";
+  $("stat-avg-kb").textContent = avg + " KB";
+  $("stat-csv-kb").textContent = fmtSize(data.csv_size_kb);
+  $("stat-csv-rows").textContent = data.csv_row_count + " rows";
+
+  const tbody = $("storage-tbody");
+  if (!data.files.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-dim)">No proof screenshots stored yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.files.map(f => `
+    <tr data-entry-id="${f.entry_id}">
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(f.title)}">${escHtml(f.title)}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace">${escHtml(f.filename)}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmtSize(f.size_kb)}</td>
+      <td>
+        <img src="/api/cpes/${f.entry_id}/proof?t=${Date.now()}"
+          class="proof-thumb"
+          onclick="window.open('/api/cpes/${f.entry_id}/proof','_blank')"
+          title="Click to view full size"
+          alt="proof">
+      </td>
+      <td>
+        <button class="btn-danger btn-sm" onclick="deleteProof('${f.entry_id}', this)">Delete</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function deleteProof(entryId, btn) {
+  if (!confirm("Delete this proof screenshot? This cannot be undone.")) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/cpes/${entryId}/proof`, { method: "DELETE" });
+    if (res.ok) {
+      showToast("Screenshot deleted");
+      await loadStorage();
+    } else {
+      showToast("Delete failed", "error");
+      btn.disabled = false;
+    }
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadStorage();
+});
+</script>
+</body>
+</html>
