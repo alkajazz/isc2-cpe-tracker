@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.4 — 2026-02-28
+
+### Added
+- **Short-entry detection** — entries under 15 minutes are flagged ⚠ in the Duration column; tooltip explains they cannot be submitted individually and must be bundled
+- **Short-entry bundling in PDF** — all entries under 15 minutes are automatically grouped on a dedicated *Bundled Short Activities* page at the end of the PDF; their durations are summed and CPE hours calculated using the standard rounding rule (nearest 0.25 hr, min 0.25, max 40)
+- **Bundled CPE in sidebar** — the sidebar Total CPE Hours always includes the bundled CPE from short entries; a separate note shows the bundled subtotal (e.g. "+0.75 bundled (3 short entries, 45m combined)")
+- **Short-entry guidance in README** — callout block in the top summary explaining the 15-minute minimum, the ⚠ flag, and how to use Export PDF to bundle and calculate combined CPE
+
+### Fixed
+- **CPE rounding display** — `toFixed(1)` was rounding 0.75 → "0.8" and 0.25 → "0.3"; changed all CPE hour display calls to `toFixed(2)` so 0.25-increment values display exactly (0.25, 0.50, 0.75, 1.00, etc.)
+
+### Changed
+- Vendor CPE credit columns no longer append the vendor label text after the calculated number (cleaner display)
+
 ## v3.3 — 2026-02-28
 
 ### Added

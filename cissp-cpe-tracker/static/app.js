@@ -1106,7 +1106,7 @@ function _renderSidebarFromRows(rows) {
     }
   }
 
-  const th = $("total-hours");   if (th) th.textContent = totalHours.toFixed(1);
+  const th = $("total-hours");   if (th) th.textContent = totalHours.toFixed(2);
   const te = $("total-entries"); if (te) te.textContent = rows.length;
   const ac = $("approved-count");if (ac) ac.textContent = byStatus.submitted || 0;
   const pc = $("pending-count"); if (pc) pc.textContent = byStatus.pending   || 0;
@@ -1135,7 +1135,7 @@ function _renderVendorStats(byVendor) {
   const active = VENDOR_IDS.filter(id => activeVendors.has(id));
   el.innerHTML = active.map(id => {
     const v = VENDORS[id];
-    const hrs = (byVendor[id] || 0).toFixed(1);
+    const hrs = (byVendor[id] || 0).toFixed(2);
     const restricted = VENDOR_TYPES[id] !== null;
     const hint = restricted
       ? `<span style="font-size:9px;color:var(--text-dim);display:block;text-align:right">webinar only</span>`
@@ -1151,7 +1151,7 @@ function _renderVendorStats(byVendor) {
 async function loadSummary() {
   try {
     const s = await apiFetch("/api/summary");
-    $("total-hours").textContent    = s.total_hours.toFixed(1);
+    $("total-hours").textContent    = s.total_hours.toFixed(2);
     $("total-entries").textContent  = s.total_entries;
     $("approved-count").textContent = s.by_status.submitted || 0;
     $("pending-count").textContent  = s.by_status.pending  || 0;
@@ -1536,7 +1536,7 @@ function buildPDFHTML(rows, totalHours, origin, bundleInfo) {
     <div class="cover-rule"></div>
     <div class="stat-row">
       <div class="stat-box">
-        <div class="stat-number">${totalHours.toFixed(1)}</div>
+        <div class="stat-number">${totalHours.toFixed(2)}</div>
         <div class="stat-label">Total CPE Hours</div>
       </div>
       <div class="stat-box">

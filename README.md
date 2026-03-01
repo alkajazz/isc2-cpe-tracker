@@ -10,9 +10,11 @@ Supports **3 major cybersecurity certification vendors** out of the box — CPE 
 | **ISACA** | CISM, CRISC, CISA, CGEIT | 1 CPE per hour · webinar type required |
 | **CompTIA** | Security+, CySA+, CASP+ | 1 CPE per hour · webinar type required |
 
+> **Short entries (under 15 minutes):** All vendors require a minimum of **15 minutes (0.25 CPE)** per submitted activity. Episodes shorter than 15 minutes are flagged ⚠ in the Duration column and show `0` CPE individually — they must be bundled with other short entries before submitting. Use **Export PDF** to generate a *Bundled Short Activities* page that sums all short-entry durations and calculates the correct combined CPE. The sidebar total always includes the bundled CPE so your running count stays accurate. Always retain certificates, emails, or other proof in case of an audit.
+
 > **Default feed:** Security Now (`feeds.twit.tv/sn.xml`) is pre-configured. Add any RSS/Atom podcast feed from the Config page. Manual entries can be added for any CPE source — courses, articles, conferences, webinars, etc.
 
-![Version](https://img.shields.io/badge/version-3.3-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-3.4-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
