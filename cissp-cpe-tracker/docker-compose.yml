@@ -5,4 +5,9 @@ services:
       - "8081:8000"
     volumes:
       - ./data:/app/data
+    environment:
+      - CSV_PATH=/app/data/cpes.csv
+      # Optional: enable HTTP Basic Auth by uncommenting and setting values
+      # - AUTH_USER=admin
+      # - AUTH_PASS=changeme
     restart: unless-stopped

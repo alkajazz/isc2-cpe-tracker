@@ -1034,6 +1034,22 @@ textarea.submit-value:focus { border-color: var(--accent); }
   margin-bottom: 20px;
 }
 
+.backup-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.backup-bar-text { display: flex; flex-direction: column; gap: 3px; }
+.backup-bar-text strong { font-size: 13px; }
+.backup-bar-text span { font-size: 12px; color: var(--text-dim); }
+.backup-bar-text code { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

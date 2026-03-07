@@ -34,12 +34,17 @@ Admin:
     GET    /api/admin/storage               attachment file listing + sizes
 """
 
+import base64
+import ipaddress
 import os
+import secrets
 from contextlib import asynccontextmanager
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.requests import Request
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -47,8 +52,105 @@ import storage
 import feed_store
 import scheduler as sched
 
+# ---------------------------------------------------------------------------
+# Optional HTTP Basic Auth
+# Read AUTH_USER and AUTH_PASS from environment.  Auth is only enforced when
+# BOTH variables are set to non-empty strings; omitting either disables it.
+# ---------------------------------------------------------------------------
+AUTH_USER = os.getenv("AUTH_USER", "")
+AUTH_PASS = os.getenv("AUTH_PASS", "")
+AUTH_ENABLED = bool(AUTH_USER and AUTH_PASS)
+
 # MIME types accepted for proof screenshot uploads.
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+# Magic byte signatures used to detect image type from raw file contents.
+# Checked in order; WebP has a special two-field check handled in the helper.
+MAGIC_BYTES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG\r\n\x1a\n": "image/png",
+    b"GIF87a": "image/gif",
+    b"GIF89a": "image/gif",
+    b"RIFF": "image/webp",  # RIFF....WEBP -- further validated below
+}
+
+MIME_TO_EXT = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _detect_image_type(data: bytes) -> str | None:
+    """
+    Inspect the raw bytes of an uploaded file and return its MIME type based
+    on magic byte signatures.  Returns None if the data does not match any
+    recognised image format.  The Content-Type header from the client is
+    intentionally ignored -- only the actual file contents are trusted.
+    """
+    for magic, mime in MAGIC_BYTES.items():
+        if data.startswith(magic):
+            # WebP: RIFF prefix is shared with other RIFF formats; confirm the
+            # sub-type marker at bytes 8-12.
+            if mime == "image/webp":
+                if data[8:12] == b"WEBP":
+                    return "image/webp"
+                return None
+            return mime
+    return None
+
+
+# ---------------------------------------------------------------------------
+# SSRF protection -- feed URL validation
+# ---------------------------------------------------------------------------
+
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("::1/128"),           # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
+]
+
+
+def _validate_feed_url(url: str) -> None:
+    """Raise ValueError if the URL is not a safe public http/https URL.
+
+    This blocks the most common SSRF vectors: direct use of private-range IP
+    addresses and localhost aliases.  It does NOT perform DNS resolution, so a
+    hostname that resolves to a private IP is not caught here.  Full
+    DNS-based SSRF protection would require resolving every hostname and
+    checking all returned addresses — that complexity is out of scope for this
+    lightweight implementation.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise ValueError("Invalid URL")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Feed URL must use http or https")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid URL: missing hostname")
+    # Block numeric IP addresses that fall in private/loopback ranges.
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for net in _PRIVATE_NETWORKS:
+            if addr in net:
+                raise ValueError("Feed URL must be a public address")
+    except ValueError as exc:
+        if "public address" in str(exc):
+            raise
+        # hostname is not a bare IP address — DNS resolution not performed here
+    # Block well-known localhost aliases regardless of case.
+    if hostname.lower() in ("localhost", "localhost.localdomain"):
+        raise ValueError("Feed URL must be a public address")
+
 
 
 @asynccontextmanager
@@ -60,6 +162,58 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Cybersecurity CPE Tracker", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# Security middlewares
+# Registration order note: FastAPI/Starlette runs middlewares in reverse
+# registration order (last registered = outermost = runs first).  We register
+# the security-headers middleware first and the auth middleware second so that
+# auth is evaluated before any application logic — and security headers are
+# always added regardless of the auth outcome.
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Inject security-hardening response headers on every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "same-origin"
+    return response
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    """
+    Enforce HTTP Basic Auth when AUTH_USER and AUTH_PASS env vars are both set.
+
+    If AUTH_ENABLED is False (either var missing/empty), all requests pass
+    through unchanged — backward-compatible default.
+
+    Uses secrets.compare_digest for timing-safe credential comparison to
+    prevent timing-based username/password enumeration attacks.
+    """
+    if not AUTH_ENABLED:
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth_header[6:]).decode("utf-8", errors="replace")
+            provided_user, _, provided_pass = decoded.partition(":")
+            user_ok = secrets.compare_digest(provided_user, AUTH_USER)
+            pass_ok = secrets.compare_digest(provided_pass, AUTH_PASS)
+            if user_ok and pass_ok:
+                return await call_next(request)
+        except Exception:
+            pass  # malformed header — fall through to 401
+
+    return Response(
+        content="Unauthorized",
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="CPE Tracker"'},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -247,16 +401,23 @@ async def upload_proof(entry_id: str, file: UploadFile = File(...)):
     if row is None:
         raise HTTPException(status_code=404, detail="CPE not found")
 
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="File must be an image (PNG, JPEG, WEBP, GIF)")
+    # Enforce size cap: read one byte beyond the limit so we can detect oversize
+    # files without buffering the entire upload into memory first.
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
 
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "png"
+    # Validate by magic bytes, not the client-supplied Content-Type header.
+    detected = _detect_image_type(contents)
+    if detected not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="File must be a valid image (JPEG, PNG, GIF, or WebP)")
+
+    # Derive a safe extension from the detected MIME type; never trust file.filename.
+    ext = MIME_TO_EXT.get(detected, "bin")
     filename = f"{entry_id}.{ext}"
     attachments_dir = storage.get_attachments_dir()
-    dest = os.path.join(attachments_dir, filename)
 
-    contents = await file.read()
-    with open(dest, "wb") as f:
+    with open(os.path.join(attachments_dir, filename), "wb") as f:
         f.write(contents)
 
     storage.update_entry(entry_id, {"proof_image": filename})
@@ -275,10 +436,16 @@ def get_proof(entry_id: str):
         raise HTTPException(status_code=404, detail="No proof image for this CPE")
 
     path = os.path.join(storage.get_attachments_dir(), row["proof_image"])
-    if not os.path.exists(path):
+    # Confinement check: resolve symlinks and verify the path stays inside the
+    # attachments directory.  Prevents path traversal via crafted proof_image values.
+    safe_path = os.path.realpath(path)
+    allowed_dir = os.path.realpath(storage.get_attachments_dir())
+    if not safe_path.startswith(allowed_dir + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid file reference")
+    if not os.path.exists(safe_path):
         raise HTTPException(status_code=404, detail="Proof image file not found")
 
-    return FileResponse(path)
+    return FileResponse(safe_path)
 
 
 @app.delete("/api/cpes/{entry_id}/proof", status_code=204)
@@ -295,8 +462,14 @@ def delete_proof(entry_id: str):
 
     if row.get("proof_image"):
         path = os.path.join(storage.get_attachments_dir(), row["proof_image"])
+        # Confinement check: resolve symlinks and verify the path stays inside the
+        # attachments directory.  Prevents path traversal via crafted proof_image values.
+        safe_path = os.path.realpath(path)
+        allowed_dir = os.path.realpath(storage.get_attachments_dir())
+        if not safe_path.startswith(allowed_dir + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid file reference")
         try:
-            os.remove(path)
+            os.remove(safe_path)
         except FileNotFoundError:
             pass
         storage.update_entry(entry_id, {"proof_image": ""})
@@ -325,6 +498,12 @@ def add_feed(body: FeedCreate):
     """
     import feedparser as _fp
     url = body.url.strip()
+
+    # SSRF guard — reject private/loopback addresses and non-http(s) schemes
+    try:
+        _validate_feed_url(url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     # Duplicate check
     existing = {f["url"] for f in feed_store.read_feeds()}
@@ -407,6 +586,49 @@ def export_csv():
     """Return the raw cpes.csv file as a downloadable CSV attachment."""
     path = storage.get_csv_path()
     return FileResponse(path, media_type="text/csv", filename="cpes.csv")
+
+
+@app.get("/api/backup")
+def download_backup():
+    """
+    Create and stream a ZIP archive containing all persistent data:
+
+    - ``cpes.csv``            — all CPE entries
+    - ``feeds.json``          — configured RSS feed list
+    - ``attachments/<file>``  — all proof screenshot files
+
+    The zip is built in memory and streamed directly — nothing is written to
+    disk.  The filename includes today's UTC date, e.g.
+    ``cpe-backup-2026-02-28.zip``.
+    """
+    import io
+    import zipfile
+    from datetime import datetime, timezone
+    from fastapi.responses import StreamingResponse
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        csv_path = storage.get_csv_path()
+        if os.path.exists(csv_path):
+            zf.write(csv_path, "cpes.csv")
+
+        if os.path.exists(feed_store.FEEDS_PATH):
+            zf.write(feed_store.FEEDS_PATH, "feeds.json")
+
+        attachments_dir = storage.get_attachments_dir()
+        for fname in os.listdir(attachments_dir):
+            fpath = os.path.join(attachments_dir, fname)
+            if os.path.isfile(fpath):
+                zf.write(fpath, f"attachments/{fname}")
+
+    buf.seek(0)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    filename = f"cpe-backup-{date_str}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/summary")
@@ -567,7 +789,7 @@ def admin_storage():
     - filename, entry_id, title, size_bytes, size_kb
     """
     rows = storage.read_all()
-    rows_by_id = {r["id"]: r for r in rows}
+    rows_by_proof = {r["proof_image"]: r for r in rows if r.get("proof_image")}
     attachments_dir = storage.get_attachments_dir()
 
     files = []
@@ -578,11 +800,10 @@ def admin_storage():
             continue
         size = os.path.getsize(fpath)
         total_bytes += size
-        entry_id = fname.rsplit(".", 1)[0]
-        row = rows_by_id.get(entry_id)
+        row = rows_by_proof.get(fname)
         files.append({
             "filename": fname,
-            "entry_id": entry_id,
+            "entry_id": row["id"] if row else None,
             "title": row["title"] if row else "(entry deleted)",
             "size_bytes": size,
             "size_kb": round(size / 1024, 1),

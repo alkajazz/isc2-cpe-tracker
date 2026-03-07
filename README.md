@@ -14,7 +14,7 @@ Supports **3 major cybersecurity certification vendors** out of the box — CPE 
 
 > **Default feed:** Security Now (`feeds.twit.tv/sn.xml`) is pre-configured. Add any RSS/Atom podcast feed from the Config page. Manual entries can be added for any CPE source — courses, articles, conferences, webinars, etc.
 
-![Version](https://img.shields.io/badge/version-3.5-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-3.6-blue) ![Python](https://img.shields.io/badge/python-3.12-blue) ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -126,8 +126,27 @@ On first start the app fetches the Security Now back-catalog (~10 seconds after 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CSV_PATH` | `/app/data/cpes.csv` | Path to the CPE data file |
+| `AUTH_USER` | _(unset)_ | HTTP Basic Auth username — auth is disabled unless both `AUTH_USER` and `AUTH_PASS` are set |
+| `AUTH_PASS` | _(unset)_ | HTTP Basic Auth password |
 
 Data lives in `cissp-cpe-tracker/data/cpes.csv` and `data/attachments/`, mounted as a Docker volume — gitignored, never committed.
+
+### Enabling authentication
+
+Uncomment and set the auth variables in `docker-compose.yml`, then rebuild:
+
+```yaml
+environment:
+  - CSV_PATH=/app/data/cpes.csv
+  - AUTH_USER=admin
+  - AUTH_PASS=yourpassword
+```
+
+```bash
+docker compose up --build -d
+```
+
+The browser will prompt for credentials on first visit and cache them for the session. Authentication is disabled by default so existing deployments are unaffected.
 
 ---
 

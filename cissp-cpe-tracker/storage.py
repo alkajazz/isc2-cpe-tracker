@@ -240,7 +240,7 @@ def update_entry(entry_id: str, updates: dict) -> Optional[dict]:
     """
     allowed = {
         "cpe_hours", "domain", "domains", "notes", "status",
-        "title", "description", "presenter", "cpe_summary", "proof_image",
+        "title", "description", "presenter", "cpe_summary",
         "subtitle", "duration", "submitted_date", "certifications",
     }
     with _lock:

@@ -32,3 +32,27 @@ Thumbs.db
 
 # Claude Code project instructions — contains deployment credentials
 CLAUDE.md
+
+# Claude Code config — never commit
+.claude/
+
+# Loose screenshots at repo root (not documentation)
+*.png
+*.jpg
+*.jpeg
+
+# Screenshots — only doc screenshots (referenced in README) are committed
+# Allowlist the specific files used in documentation:
+screenshots/*
+!screenshots/dashboard.png
+!screenshots/vendor-cpe-mode.gif
+!screenshots/column-reorder.gif
+!screenshots/light-mode-toggle.gif
+!screenshots/date-presets.gif
+!screenshots/config.png
+!screenshots/storage.png
+!screenshots/admin.png
+
+# Stray screenshots inside the app directory
+cissp-cpe-tracker/*.png
+cissp-cpe-tracker/*.jpg

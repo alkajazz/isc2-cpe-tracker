@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.6 — 2026-03-07
+
+### Added
+- **Optional HTTP Basic Auth** — set `AUTH_USER` and `AUTH_PASS` environment variables to enable authentication on all endpoints; disabled by default for backward compatibility
+- **Security response headers** — `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: same-origin` injected on every response
+
+### Fixed
+- **SSRF via feed URL** — `_validate_feed_url()` now rejects non-http/https URL schemes (`file://`, `gopher://`, etc.) and direct IP addresses in RFC 1918, loopback, and link-local ranges before any outbound fetch
+- **Path traversal via `proof_image` field** — `proof_image` removed from `update_entry()` allowed fields so it can only be set through the actual file upload endpoint; `os.path.realpath` confinement check added to proof GET and DELETE endpoints to block `../` and symlink escapes
+- **File upload type spoofing** — proof image uploads now validated by magic bytes instead of the client-supplied `Content-Type` header; file extension is derived from detected MIME type, not the original filename
+- **Unbounded file upload** — proof image uploads now capped at 10 MB; requests exceeding the limit receive HTTP 413
+
+### Changed
+- **Docker: non-root user** — container now runs as `appuser` (non-root) instead of UID 0
+- **Pinned dependencies** — all five packages pinned to exact versions; `python-multipart` updated to 0.0.20 which resolves CVE-2024-24762 (ReDoS in multipart form parser)
+
 ## v3.5 — 2026-02-28
 
 ### Added
